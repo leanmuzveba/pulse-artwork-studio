@@ -67,6 +67,18 @@ services:
       echo 'buckets ready';
       "
 
+  # One-shot: apply database migrations, then exit. The API waits for it.
+  migrate:
+    build:
+      context: ./services/api
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   api:
     build:
       context: ./services/api
@@ -83,6 +95,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     develop:
       watch:
         - action: sync

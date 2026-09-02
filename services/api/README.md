@@ -39,9 +39,33 @@ app/
   api/v1/router.py     aggregates the versioned route surface
   api/v1/routes/       one module per service boundary (health implemented;
                        auth/projects/artworks/processing/exports/... stubbed)
+  db/                  Base + mixins, enums, async session, models/
   schemas/             response envelopes
+migrations/            Alembic (env.py + versions/)
 tests/                 smoke tests
 ```
+
+## Database & migrations
+
+Async SQLAlchemy 2.0 over PostgreSQL (asyncpg). Models live in `app/db/models/`:
+`users`, `projects`, `artworks`, `processing_jobs`, `exports`, `entitlements`,
+`audit_logs`. Originals are immutable — a processing operation writes a new
+derived `artworks` row pointing at its parent.
+
+```bash
+# Apply migrations (run from services/api, with DATABASE_URL set)
+alembic upgrade head
+
+# Autogenerate a new migration after changing models
+alembic revision --autogenerate -m "describe change"
+
+# Preview SQL without a database
+alembic upgrade head --sql
+```
+
+In Docker, the one-shot `migrate` service runs `alembic upgrade head` before the
+API starts. Readiness (`GET /api/v1/health/ready`) reports DB connectivity;
+liveness (`GET /api/v1/health`) does not touch the DB.
 
 ## Conventions
 

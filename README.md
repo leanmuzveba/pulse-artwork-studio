@@ -82,9 +82,11 @@ Branch model: `main` (production) ← `develop` (integration) ← `feature/*`,
 
 ## Status
 
-**Phase 1 — Foundation** (in progress). Repo, service scaffolds, async pipeline,
-CI, and local stack are up. Next: PostgreSQL models & migrations, email/password
-auth, and the signed-URL upload flow. See `docs/` for the roadmap.
+**Phase 1 — Foundation** (in progress). Up so far: repo, service scaffolds, async
+pipeline, CI, local stack, and the **PostgreSQL data layer** — SQLAlchemy models
+(`users`, `projects`, `artworks`, `processing_jobs`, `exports`, `entitlements`,
+`audit_logs`) with an Alembic initial migration and a DB readiness check. Next:
+email/password auth and the signed-URL upload flow. See `docs/` for the roadmap.
 
 ## License
 

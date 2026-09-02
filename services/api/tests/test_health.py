@@ -15,12 +15,21 @@ def test_liveness():
     assert resp.json() == {"status": "ok"}
 
 
-def test_readiness():
+def test_liveness_readiness_alias():
     resp = client.get("/api/v1/health")
     assert resp.status_code == 200
     body = resp.json()
     assert body["status"] == "ok"
     assert body["service"] == "pulse-api"
+
+
+def test_readiness_reports_dependency_checks():
+    # Without a database the endpoint reports "degraded" (503); with one, "ok" (200).
+    resp = client.get("/api/v1/health/ready")
+    assert resp.status_code in (200, 503)
+    body = resp.json()
+    assert "database" in body["checks"]
+    assert body["status"] in ("ok", "degraded")
 
 
 def test_request_id_header_present():
