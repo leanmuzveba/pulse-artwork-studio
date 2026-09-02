@@ -35,6 +35,7 @@ class ErrorCode(str, Enum):
     PAYLOAD_TOO_LARGE = "payload_too_large"
     UNSUPPORTED_MEDIA_TYPE = "unsupported_media_type"
     NOT_IMPLEMENTED = "not_implemented"
+    SERVICE_UNAVAILABLE = "service_unavailable"
     INTERNAL_ERROR = "internal_error"
 
 
@@ -93,6 +94,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             415: ErrorCode.UNSUPPORTED_MEDIA_TYPE,
             429: ErrorCode.RATE_LIMITED,
             501: ErrorCode.NOT_IMPLEMENTED,
+            503: ErrorCode.SERVICE_UNAVAILABLE,
         }.get(exc.status_code, ErrorCode.INTERNAL_ERROR)
         message = exc.detail if isinstance(exc.detail, str) else "Request failed."
         return JSONResponse(status_code=exc.status_code, content=_envelope(code.value, message))

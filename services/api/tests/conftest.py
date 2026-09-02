@@ -26,3 +26,19 @@ def db_available() -> bool:
 def require_db(db_available: bool) -> None:
     if not db_available:
         pytest.skip("no database available (integration test)")
+
+
+@pytest.fixture(scope="session")
+def storage_available() -> bool:
+    try:
+        from app.services.storage import storage_reachable
+
+        return storage_reachable()
+    except Exception:
+        return False
+
+
+@pytest.fixture
+def require_storage(storage_available: bool) -> None:
+    if not storage_available:
+        pytest.skip("no object storage available (integration test)")
