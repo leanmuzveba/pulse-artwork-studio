@@ -1,0 +1,137 @@
+PULSE ARTWORK STUDIO AI — GITHUB REPOSITORY ARCHITECTURE
+==============================================================
+
+Repository
+└── Pulse-Artwork-Studio-AI/
+    │
+    ├── apps/
+    │   └── web/
+    │       ├── lib/
+    │       │   ├── app/
+    │       │   │   ├── router/
+    │       │   │   ├── theme/
+    │       │   │   └── config/
+    │       │   ├── core/
+    │       │   │   ├── errors/
+    │       │   │   ├── networking/
+    │       │   │   ├── storage/
+    │       │   │   └── utilities/
+    │       │   ├── features/
+    │       │   │   ├── auth/
+    │       │   │   ├── dashboard/
+    │       │   │   ├── projects/
+    │       │   │   ├── editor/
+    │       │   │   ├── ai_assistant/
+    │       │   │   ├── artwork_inspector/
+    │       │   │   ├── enhancement/
+    │       │   │   ├── background_removal/
+    │       │   │   ├── vector/
+    │       │   │   ├── halftone/
+    │       │   │   ├── embroidery/
+    │       │   │   ├── dtf_tools/
+    │       │   │   └── export/
+    │       │   ├── shared/
+    │       │   │   ├── widgets/
+    │       │   │   ├── models/
+    │       │   │   └── constants/
+    │       │   └── main.dart
+    │       ├── test/
+    │       ├── web/
+    │       └── pubspec.yaml
+    │
+    ├── services/
+    │   ├── api/
+    │   │   ├── app/
+    │   │   │   ├── api/
+    │   │   │   ├── auth/
+    │   │   │   ├── projects/
+    │   │   │   ├── artworks/
+    │   │   │   ├── processing/
+    │   │   │   ├── exports/
+    │   │   │   ├── subscriptions/
+    │   │   │   ├── users/
+    │   │   │   ├── database/
+    │   │   │   ├── schemas/
+    │   │   │   ├── services/
+    │   │   │   └── main.py
+    │   │   ├── tests/
+    │   │   └── pyproject.toml
+    │   │
+    │   ├── worker/
+    │   │   ├── tasks/
+    │   │   │   ├── enhancement/
+    │   │   │   ├── background/
+    │   │   │   ├── vector/
+    │   │   │   ├── halftone/
+    │   │   │   ├── embroidery/
+    │   │   │   └── dtf/
+    │   │   ├── pipelines/
+    │   │   ├── models/
+    │   │   ├── processors/
+    │   │   ├── tests/
+    │   │   └── pyproject.toml
+    │   │
+    │   └── shared/
+    │       ├── contracts/
+    │       ├── logging/
+    │       └── utilities/
+    │
+    ├── packages/
+    │   ├── design_system/
+    │   ├── image_models/
+    │   └── api_contracts/
+    │
+    ├── infrastructure/
+    │   ├── docker/
+    │   ├── nginx/
+    │   ├── postgres/
+    │   ├── redis/
+    │   ├── object_storage/
+    │   └── monitoring/
+    │
+    ├── .github/
+    │   ├── workflows/
+    │   │   ├── flutter-ci.yml
+    │   │   ├── backend-ci.yml
+    │   │   ├── worker-ci.yml
+    │   │   └── deploy.yml
+    │   ├── ISSUE_TEMPLATE/
+    │   └── PULL_REQUEST_TEMPLATE.md
+    │
+    ├── docs/
+    │   ├── prd/
+    │   ├── architecture/
+    │   ├── api/
+    │   ├── ux/
+    │   ├── security/
+    │   ├── testing/
+    │   └── release/
+    │
+    ├── scripts/
+    ├── .env.example
+    ├── .gitignore
+    ├── docker-compose.yml
+    ├── README.md
+    ├── CONTRIBUTING.md
+    ├── SECURITY.md
+    └── LICENSE
+
+BRANCH STRATEGY
+---------------
+main        = production-ready releases
+develop     = integration branch
+feature/*   = individual features
+fix/*       = bug fixes
+release/*   = release preparation
+hotfix/*    = urgent production fixes
+
+KEY RULES
+---------
+1. Never commit secrets or API keys.
+2. Every feature gets tests.
+3. API contracts are versioned.
+4. Database migrations are committed.
+5. Pull requests require review before merge.
+6. AI/image jobs must be asynchronous.
+7. Original artwork is immutable.
+8. Large files live in object storage, not Git.

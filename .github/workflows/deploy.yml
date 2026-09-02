@@ -1,0 +1,14 @@
+name: deploy
+
+# Deployment is defined in a later phase: build immutable, versioned images,
+# run database migrations, and release through controlled environments
+# (staging -> production). Kept as a manual trigger until then.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  placeholder:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Not configured yet
+        run: echo "CD pipeline lands with the deployment work (Phase 1 wrap / Phase 5)."

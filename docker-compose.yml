@@ -1,0 +1,108 @@
+# Local development stack for Pulse Artwork Studio AI.
+#   docker compose up -d          # start postgres, redis, minio, api, worker
+#   docker compose logs -f api     # follow API logs
+#   docker compose down            # stop (add -v to wipe data volumes)
+#
+# The Flutter web client runs separately (see apps/web/README.md).
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-pulse}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pulse}
+      POSTGRES_DB: ${POSTGRES_DB:-pulse}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pulse} -d ${POSTGRES_DB:-pulse}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-pulse-minio}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-pulse-minio-secret}
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # web console
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-shot: create the buckets the app expects, then exit.
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${S3_ACCESS_KEY:-pulse-minio} ${S3_SECRET_KEY:-pulse-minio-secret} &&
+      mc mb -p local/${S3_BUCKET_ORIGINALS:-pulse-originals} &&
+      mc mb -p local/${S3_BUCKET_DERIVED:-pulse-derived} &&
+      mc mb -p local/${S3_BUCKET_EXPORTS:-pulse-exports} &&
+      echo 'buckets ready';
+      "
+
+  api:
+    build:
+      context: ./services/api
+    env_file: .env
+    environment:
+      # Inside the compose network, reach services by name.
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      S3_ENDPOINT_URL: http://minio:9000
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    develop:
+      watch:
+        - action: sync
+          path: ./services/api
+          target: /app
+        - action: rebuild
+          path: ./services/api/pyproject.toml
+
+  worker:
+    build:
+      context: ./services/worker
+    env_file: .env
+    environment:
+      REDIS_HOST: redis
+      S3_ENDPOINT_URL: http://minio:9000
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
+  pg_data:
+  redis_data:
+  minio_data:

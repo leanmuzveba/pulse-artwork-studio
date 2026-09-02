@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DTFStudio — Process Models & System Architecture</title>
+<style>
+  :root {
+    --purple: #7C3AED;
+    --purple-l: #A78BFA;
+    --purple-d: #4C1D95;
+    --teal: #0D9488;
+    --amber: #D97706;
+    --red: #DC2626;
+    --green: #16A34A;
+    --blue: #1D4ED8;
+    --gray-dark: #1E1B4B;
+    --gray-mid: #374151;
+    --gray-l: #F3F4F6;
+    --border: #E5E7EB;
+    --white: #FFFFFF;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #F8F7FF; color: #111; }
+  
+  /* Cover */
+  .cover { background: var(--purple-d); color: white; padding: 60px 80px; text-align: center; }
+  .cover .logo { font-size: 52px; font-weight: 900; letter-spacing: 4px; color: var(--purple-l); }
+  .cover .sub { font-size: 18px; color: rgba(255,255,255,0.7); margin-top: 10px; }
+  .cover .doc-type { display: inline-block; margin-top: 24px; padding: 8px 24px; border: 2px solid var(--purple-l); border-radius: 30px; font-size: 14px; color: var(--purple-l); letter-spacing: 2px; text-transform: uppercase; }
+  .cover-meta { margin-top: 40px; font-size: 13px; color: rgba(255,255,255,0.5); line-height: 2; }
+  
+  /* Nav */
+  nav { position: sticky; top: 0; background: white; border-bottom: 1px solid var(--border); z-index: 100; display: flex; gap: 0; overflow-x: auto; }
+  nav button { padding: 14px 20px; font-size: 13px; font-weight: 600; border: none; background: transparent; cursor: pointer; color: var(--gray-mid); border-bottom: 3px solid transparent; white-space: nowrap; transition: all 0.15s; }
+  nav button.active { color: var(--purple); border-bottom-color: var(--purple); }
+  nav button:hover { background: var(--gray-l); }
+  
+  /* Sections */
+  .section { display: none; padding: 40px 60px; max-width: 1200px; margin: 0 auto; }
+  .section.active { display: block; }
+  
+  .section-title { font-size: 28px; font-weight: 800; color: var(--purple-d); margin-bottom: 6px; }
+  .section-sub { font-size: 15px; color: #6B7280; margin-bottom: 36px; line-height: 1.6; }
+  
+  /* Process flow diagrams */
+  .flow-grid { display: grid; gap: 40px; }
+  
+  .flow-card { background: white; border-radius: 16px; padding: 32px; box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 16px rgba(124,58,237,0.06); border: 1px solid var(--border); }
+  .flow-card h3 { font-size: 17px; font-weight: 700; color: var(--purple-d); margin-bottom: 6px; }
+  .flow-card .flow-desc { font-size: 13px; color: #6B7280; margin-bottom: 24px; }
+  
+  /* Swimlane */
+  .swimlane { overflow-x: auto; }
+  .swimlane-inner { min-width: 700px; }
+  
+  .lane { display: flex; align-items: stretch; border-top: 1px solid var(--border); }
+  .lane:first-child { border-top: none; }
+  .lane-label { width: 120px; flex-shrink: 0; padding: 12px 14px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; background: var(--gray-l); color: var(--gray-mid); display: flex; align-items: center; border-right: 1px solid var(--border); }
+  .lane-content { flex: 1; padding: 12px; display: flex; align-items: center; gap: 12px; flex-wrap: nowrap; }
+  
+  .step { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 100px; }
+  .step-box { padding: 8px 12px; border-radius: 8px; font-size: 11px; font-weight: 600; text-align: center; line-height: 1.3; width: 100px; border: 2px solid; }
+  .step-time { font-size: 9px; color: #9CA3AF; }
+  
+  .arrow { color: #9CA3AF; font-size: 18px; flex-shrink: 0; align-self: center; margin-top: -8px; }
+  .arrow-down { display: block; text-align: center; color: #9CA3AF; font-size: 18px; margin: 4px 0; }
+  
+  .s-blue   { background: #EFF6FF; border-color: #3B82F6; color: #1D4ED8; }
+  .s-purple { background: #F5F3FF; border-color: #7C3AED; color: #4C1D95; }
+  .s-teal   { background: #F0FDF4; border-color: #0D9488; color: #065F46; }
+  .s-amber  { background: #FFFBEB; border-color: #D97706; color: #92400E; }
+  .s-gray   { background: #F9FAFB; border-color: #9CA3AF; color: #374151; }
+  .s-red    { background: #FEF2F2; border-color: #DC2626; color: #991B1B; }
+  .s-green  { background: #F0FDF4; border-color: #16A34A; color: #14532D; }
+  
+  .diamond { width: 80px; height: 80px; transform: rotate(45deg); border-radius: 8px; border: 2px solid var(--amber); background: #FFFBEB; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .diamond span { transform: rotate(-45deg); font-size: 10px; font-weight: 700; color: #92400E; text-align: center; line-height: 1.3; }
+  
+  /* Pipeline / horizontal flow */
+  .pipeline { display: flex; align-items: center; gap: 0; overflow-x: auto; padding: 16px 0; }
+  .pip-step { display: flex; flex-direction: column; align-items: center; min-width: 130px; }
+  .pip-box { width: 110px; padding: 12px 10px; border-radius: 10px; text-align: center; font-size: 11px; font-weight: 700; line-height: 1.4; border: 2px solid; }
+  .pip-sub { font-size: 9px; color: #9CA3AF; margin-top: 5px; text-align: center; }
+  .pip-arrow { width: 32px; height: 2px; background: #D1D5DB; position: relative; flex-shrink: 0; }
+  .pip-arrow::after { content: '▶'; position: absolute; right: -6px; top: -7px; font-size: 11px; color: #9CA3AF; }
+  
+  /* Architecture diagram */
+  .arch-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  @media (max-width: 800px) { .arch-grid { grid-template-columns: 1fr; } .section { padding: 24px 20px; } }
+  
+  .arch-layer { border-radius: 14px; overflow: hidden; border: 1px solid var(--border); }
+  .arch-layer-header { padding: 12px 18px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; }
+  .arch-layer-body { padding: 18px; display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
+  
+  .arch-component { padding: 10px; border-radius: 8px; border: 1px solid; text-align: center; font-size: 11px; font-weight: 600; line-height: 1.3; }
+  .arch-component .arch-icon { font-size: 20px; margin-bottom: 4px; display: block; }
+  .arch-component .arch-note { font-size: 9px; font-weight: 400; margin-top: 3px; opacity: 0.7; }
+  
+  .layer-frontend  { background: #EFF6FF; border-color: #BFDBFE; }
+  .layer-frontend .arch-layer-header { background: #1D4ED8; color: white; }
+  .comp-frontend   { background: #DBEAFE; border-color: #93C5FD; color: #1E40AF; }
+  
+  .layer-backend   { background: #F0FDF4; border-color: #BBF7D0; }
+  .layer-backend .arch-layer-header { background: #15803D; color: white; }
+  .comp-backend    { background: #DCFCE7; border-color: #86EFAC; color: #14532D; }
+  
+  .layer-ai        { background: #F5F3FF; border-color: #DDD6FE; }
+  .layer-ai .arch-layer-header { background: #7C3AED; color: white; }
+  .comp-ai         { background: #EDE9FE; border-color: #C4B5FD; color: #4C1D95; }
+  
+  .layer-data      { background: #FFFBEB; border-color: #FDE68A; }
+  .layer-data .arch-layer-header { background: #B45309; color: white; }
+  .comp-data       { background: #FEF3C7; border-color: #FCD34D; color: #78350F; }
+  
+  .layer-ext       { background: #FFF1F2; border-color: #FECDD3; }
+  .layer-ext .arch-layer-header { background: #B91C1C; color: white; }
+  .comp-ext        { background: #FEE2E2; border-color: #FCA5A5; color: #7F1D1D; }
+  
+  /* Data flow */
+  .dataflow { position: relative; }
+  .df-node { position: absolute; border-radius: 10px; border: 2px solid; padding: 8px 10px; font-size: 10px; font-weight: 700; text-align: center; line-height: 1.4; }
+  .df-canvas { position: relative; }
+  
+  /* API table */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+  th { background: var(--purple); color: white; padding: 10px 14px; text-align: left; font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+  td { padding: 9px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:nth-child(even) td { background: var(--gray-l); }
+  tr:hover td { background: #F5F3FF; }
+  
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+  .badge-free  { background: #DCFCE7; color: #14532D; }
+  .badge-paid  { background: #FEE2E2; color: #7F1D1D; }
+  .badge-trial { background: #FEF3C7; color: #78350F; }
+  .badge-must  { background: #EDE9FE; color: #4C1D95; }
+  .badge-should{ background: #DBEAFE; color: #1E40AF; }
+  .badge-could { background: #D1FAE5; color: #065F46; }
+  
+  /* Journey map */
+  .journey { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); }
+  .journey-phase { padding: 16px 12px; border-right: 1px solid var(--border); }
+  .journey-phase:last-child { border-right: none; }
+  .journey-phase-title { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; padding: 6px 10px; border-radius: 6px; text-align: center; }
+  .journey-item { font-size: 11px; padding: 5px 8px; border-radius: 5px; margin-bottom: 6px; border-left: 3px solid; }
+  .journey-emotion { text-align: center; font-size: 22px; margin-top: 12px; }
+  
+  .ph1 { background: #EFF6FF; }  .ph1 .journey-phase-title { background: #DBEAFE; color: #1E40AF; }
+  .ph2 { background: #F5F3FF; }  .ph2 .journey-phase-title { background: #EDE9FE; color: #4C1D95; }
+  .ph3 { background: #F0FDF4; }  .ph3 .journey-phase-title { background: #DCFCE7; color: #14532D; }
+  .ph4 { background: #FFFBEB; }  .ph4 .journey-phase-title { background: #FEF3C7; color: #78350F; }
+  .ph5 { background: #FFF1F2; }  .ph5 .journey-phase-title { background: #FEE2E2; color: #7F1D1D; }
+  
+  /* Responsive fix */
+  .journey { overflow-x: auto; min-width: 700px; }
+  .journey-wrap { overflow-x: auto; }
+  
+  /* Full-width arch diagram using SVG-like approach */
+  .full-arch { width: 100%; background: white; border-radius: 14px; padding: 32px; border: 1px solid var(--border); overflow-x: auto; }
+  .arch-row { display: flex; gap: 16px; margin-bottom: 16px; align-items: stretch; }
+  .arch-block { flex: 1; border-radius: 10px; overflow: hidden; min-width: 140px; }
+  .arch-block-hdr { padding: 8px 14px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; }
+  .arch-block-body { padding: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .arch-pill { padding: 5px 10px; border-radius: 20px; font-size: 10px; font-weight: 700; }
+  .arch-connector { display: flex; align-items: center; justify-content: center; font-size: 24px; color: #9CA3AF; width: 30px; flex-shrink: 0; }
+  
+  /* Legend */
+  .legend { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 20px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+  .legend-dot { width: 12px; height: 12px; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="logo">DTFSTUDIO</div>
+  <div class="sub">AI-Powered Content Creation Platform for DTF Printing & Machinery</div>
+  <div class="doc-type">Process Models · System Architecture</div>
+  <div class="cover-meta">
+    Document Version: 1.0 &nbsp;|&nbsp; Status: Draft &nbsp;|&nbsp; August 2026<br>
+    Companion to: DTFStudio_PRD.docx &nbsp;|&nbsp; Classification: Confidential
+  </div>
+</div>
+
+<nav>
+  <button class="active" onclick="show('journey')">👤 User Journey</button>
+  <button onclick="show('master')">🔄 Master Process</button>
+  <button onclick="show('ai-pipe')">🤖 AI Pipeline</button>
+  <button onclick="show('avatar')">🎭 Avatar Flow</button>
+  <button onclick="show('arch')">🏗️ System Architecture</button>
+  <button onclick="show('apis')">🔌 API Integration Map</button>
+  <button onclick="show('data')">💾 Data Flow</button>
+</nav>
+
+<!-- ══════════════════════════════════════════════════
+     USER JOURNEY MAP
+═══════════════════════════════════════════════════ -->
+<div id="journey" class="section active">
+  <div class="section-title">User Journey Map</div>
+  <div class="section-sub">End-to-end experience of a DTF business operator using DTFStudio to produce and publish social media content — from idea to posted video.</div>
+
+  <div class="flow-card">
+    <h3>Persona: DTF Business Owner / Marketing Coordinator — Johannesburg, SA</h3>
+    <div class="flow-desc">Goal: Produce a TikTok video about DTF ink washing tips without filming or spending hours editing.</div>
+    <div class="journey-wrap">
+      <div class="journey">
+        <div class="journey-phase ph1">
+          <div class="journey-phase-title">1 · Plan</div>
+          <div class="journey-item" style="background:#DBEAFE;border-color:#3B82F6;color:#1E40AF">Identifies topic: "3 reasons your DTF prints are washing out"</div>
+          <div class="journey-item" style="background:#DBEAFE;border-color:#3B82F6;color:#1E40AF">Decides format: Talking avatar + text overlays</div>
+          <div class="journey-item" style="background:#DBEAFE;border-color:#3B82F6;color:#1E40AF">Opens DTFStudio in browser</div>
+          <div class="journey-emotion">🧠 Focused</div>
+        </div>
+        <div class="journey-phase ph2">
+          <div class="journey-phase-title">2 · Generate</div>
+          <div class="journey-item" style="background:#EDE9FE;border-color:#7C3AED;color:#4C1D95">Types topic into AI panel</div>
+          <div class="journey-item" style="background:#EDE9FE;border-color:#7C3AED;color:#4C1D95">Clicks "Generate Script" → 45s script appears</div>
+          <div class="journey-item" style="background:#EDE9FE;border-color:#7C3AED;color:#4C1D95">Clicks "Generate Hashtags" → 25 DTF-specific tags</div>
+          <div class="journey-item" style="background:#EDE9FE;border-color:#7C3AED;color:#4C1D95">Reviews 5 hook concepts</div>
+          <div class="journey-emotion">😲 Impressed</div>
+        </div>
+        <div class="journey-phase ph3">
+          <div class="journey-phase-title">3 · Edit</div>
+          <div class="journey-item" style="background:#DCFCE7;border-color:#16A34A;color:#14532D">Submits script to HeyGen → avatar video generated</div>
+          <div class="journey-item" style="background:#DCFCE7;border-color:#16A34A;color:#14532D">Video auto-imports into timeline</div>
+          <div class="journey-item" style="background:#DCFCE7;border-color:#16A34A;color:#14532D">Adds hook text overlay at 0-3s</div>
+          <div class="journey-item" style="background:#DCFCE7;border-color:#16A34A;color:#14532D">Adds lower-third at 5s: "PULSE DTF"</div>
+          <div class="journey-emotion">🎯 In flow</div>
+        </div>
+        <div class="journey-phase ph4">
+          <div class="journey-phase-title">4 · Polish</div>
+          <div class="journey-item" style="background:#FEF3C7;border-color:#D97706;color:#78350F">Previews full 45s composition</div>
+          <div class="journey-item" style="background:#FEF3C7;border-color:#D97706;color:#78350F">Adjusts hook text size to 48px</div>
+          <div class="journey-item" style="background:#FEF3C7;border-color:#D97706;color:#78350F">Applies "Vivid" colour filter</div>
+          <div class="journey-emotion">😌 Satisfied</div>
+        </div>
+        <div class="journey-phase ph5">
+          <div class="journey-phase-title">5 · Publish</div>
+          <div class="journey-item" style="background:#FEE2E2;border-color:#DC2626;color:#7F1D1D">Clicks Export → TikTok 9:16</div>
+          <div class="journey-item" style="background:#FEE2E2;border-color:#DC2626;color:#7F1D1D">Copies 25 hashtags to clipboard</div>
+          <div class="journey-item" style="background:#FEE2E2;border-color:#DC2626;color:#7F1D1D">Uploads to TikTok with caption</div>
+          <div class="journey-item" style="background:#FEE2E2;border-color:#DC2626;color:#7F1D1D">Total time: 9 minutes 42 seconds</div>
+          <div class="journey-emotion">🚀 Thrilled</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="flow-card" style="margin-top: 24px;">
+    <h3>Pain Points Resolved by DTFStudio</h3>
+    <div class="flow-desc">Before vs. After comparison for a typical DTF content creation session.</div>
+    <table>
+      <tr><th>Pain Point (Before)</th><th>DTFStudio Solution</th><th>Time Saved</th></tr>
+      <tr><td>Hiring a videographer for every post</td><td>Avatar generation from single photo — unlimited videos</td><td>3–5 hours/post</td></tr>
+      <tr><td>Writing scripts from scratch</td><td>AI generates DTF-specific script in &lt; 10 seconds</td><td>45–90 min</td></tr>
+      <tr><td>Researching hashtags manually</td><td>25 categorised hashtags in &lt; 8 seconds</td><td>30 min</td></tr>
+      <tr><td>Reformatting video for each platform</td><td>One-click export presets for TikTok, IG, YouTube, FB</td><td>20–40 min</td></tr>
+      <tr><td>Generic content not reaching DTF audience</td><td>Knowledge base grounds AI in DTF industry accuracy</td><td>Immeasurable</td></tr>
+      <tr><td>Using CapCut with no AI assistance</td><td>CapCut-grade editor + Claude AI in one interface</td><td>Entire workflow</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     MASTER PROCESS
+═══════════════════════════════════════════════════ -->
+<div id="master" class="section">
+  <div class="section-title">Master Content Creation Process</div>
+  <div class="section-sub">The end-to-end content production workflow modelled as a swimlane diagram, showing actor responsibilities across each phase.</div>
+
+  <div class="flow-card">
+    <h3>Content Production Swimlane</h3>
+    <div class="flow-desc">Five phases from topic identification to published content. Swimlanes show which actor performs each step.</div>
+    <div class="swimlane">
+      <div class="swimlane-inner">
+        <!-- Headers -->
+        <div style="display:flex; background:var(--purple-d); color:white; border-radius:8px 8px 0 0; margin-bottom:0;">
+          <div style="width:120px; flex-shrink:0; padding:10px 14px; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:1px; border-right:1px solid rgba(255,255,255,0.2);">Actor</div>
+          <div style="flex:1; padding:10px 14px; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:1px; text-align:center;">Phase 1: PLAN</div>
+          <div style="flex:1; padding:10px 14px; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:1px; text-align:center; border-left:1px solid rgba(255,255,255,0.2);">Phase 2: GENERATE</div>
+          <div style="flex:1; padding:10px 14px; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:1px; text-align:center; border-left:1px solid rgba(255,255,255,0.2);">Phase 3: EDIT</div>
+          <div style="flex:1; padding:10px 14px; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:1px; text-align:center; border-left:1px solid rgba(255,255,255,0.2);">Phase 4: POLISH</div>
+          <div style="flex:1; padding:10px 14px; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:1px; text-align:center; border-left:1px solid rgba(255,255,255,0.2);">Phase 5: PUBLISH</div>
+        </div>
+        <!-- Operator lane -->
+        <div class="lane">
+          <div class="lane-label">Business Operator</div>
+          <div class="lane-content">
+            <div class="step"><div class="step-box s-blue">Select topic &amp; format</div><div class="step-time">~2 min</div></div>
+            <div class="arrow">→</div>
+            <div class="step"><div class="step-box s-blue">Open DTFStudio</div></div>
+          </div>
+          <div class="lane-content">
+            <div class="step"><div class="step-box s-blue">Enter topic prompt</div></div>
+            <div class="arrow">→</div>
+            <div class="step"><div class="step-box s-blue">Review &amp; select outputs</div><div class="step-time">~3 min</div></div>
+          </div>
+          <div class="lane-content">
+            <div class="step"><div class="step-box s-blue">Import footage</div></div>
+            <div class="arrow">→</div>
+            <div class="step"><div class="step-box s-blue">Trim clips</div></div>
+            <div class="arrow">→</div>
+            <div class="step"><div class="step-box s-blue">Add text layers</div><div class="step-time">~3 min</div></div>
+          </div>
+          <div class="lane-content">
+            <div class="step"><div class="step-box s-blue">Preview &amp; adjust</div><div class="step-time">~1 min</div></div>
+          </div>
+          <div class="lane-content">
+            <div class="step"><div class="step-box s-blue">Export video</div></div>
+            <div class="arrow">→</div>
+            <div class="step"><div class="step-box s-blue">Copy hashtags</div></div>
+            <div class="arrow">→</div>
+            <div class="step"><div class="step-box s-blue">Post to platform</div><div class="step-time">~1 min</div></div>
+          </div>
+        </div>
+        <!-- DTFStudio lane -->
+        <div class="lane">
+          <div class="lane-label">DTFStudio Platform</div>
+          <div class="lane-content">
+            <div class="step"><div class="step-box s-purple">Load editor UI</div></div>
+            <div class="arrow">→</div>
+            <div class="step"><div class="step-box s-purple">Present format options</div></div>
+          </div>
+          <div class="lane-content">
+            <div class="step"><div class="step-box s-purple">Route to AI engines</div></div>
+            <div class="arrow">→</div>
+            <div class="step"><div class="step-box s-purple">Display AI outputs</div></div>
+          </div>
+          <div class="lane-content">
+            <div class="step"><div class="step-box s-purple">Timeline render</div></div>
+            <div class="arrow">→</div>
+            <div class="step"><div class="step-box s-purple">Canvas overlay engine</div></div>
+          </div>
+          <div class="lane-content">
+            <div class="step"><div class="step-box s-purple">Real-time preview</div></div>
+          </div>
+          <div class="lane-content">
+            <div class="step"><div class="step-box s-purple">FFmpeg.wasm render</div></div>
+            <div class="arrow">→</div>
+            <div class="step"><div class="step-box s-purple">Serve MP4 download</div></div>
+          </div>
+        </div>
+        <!-- AI Services lane -->
+        <div class="lane">
+          <div class="lane-label">AI Services</div>
+          <div class="lane-content">
+            <div class="step" style="opacity:0.2"><div class="step-box s-gray">—</div></div>
+          </div>
+          <div class="lane-content">
+            <div class="step"><div class="step-box s-teal">pgvector RAG query</div></div>
+            <div class="arrow">→</div>
+            <div class="step"><div class="step-box s-teal">Claude / Gemini generate</div></div>
+            <div class="arrow">→</div>
+            <div class="step"><div class="step-box s-teal">Return script + tags + hooks</div></div>
+          </div>
+          <div class="lane-content">
+            <div class="step"><div class="step-box s-teal">HeyGen: avatar video</div></div>
+            <div class="arrow">→</div>
+            <div class="step"><div class="step-box s-teal">ElevenLabs: TTS</div></div>
+          </div>
+          <div class="lane-content">
+            <div class="step" style="opacity:0.2"><div class="step-box s-gray">—</div></div>
+          </div>
+          <div class="lane-content">
+            <div class="step" style="opacity:0.2"><div class="step-box s-gray">—</div></div>
+          </div>
+        </div>
+        <!-- Storage lane -->
+        <div class="lane" style="border-radius:0 0 0 0;">
+          <div class="lane-label">Supabase Storage</div>
+          <div class="lane-content">
+            <div class="step" style="opacity:0.2"><div class="step-box s-gray">—</div></div>
+          </div>
+          <div class="lane-content">
+            <div class="step" style="opacity:0.2"><div class="step-box s-gray">—</div></div>
+          </div>
+          <div class="lane-content">
+            <div class="step"><div class="step-box s-amber">Upload raw clips</div></div>
+            <div class="arrow">→</div>
+            <div class="step"><div class="step-box s-amber">Store avatar video</div></div>
+          </div>
+          <div class="lane-content">
+            <div class="step" style="opacity:0.2"><div class="step-box s-gray">—</div></div>
+          </div>
+          <div class="lane-content">
+            <div class="step"><div class="step-box s-amber">Store exported MP4</div></div>
+            <div class="arrow">→</div>
+            <div class="step"><div class="step-box s-amber">Auto-delete after 7d</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex; gap:24px; margin-top:20px; padding:16px; background:#F5F3FF; border-radius:8px;">
+      <div style="text-align:center;"><div style="font-size:24px;font-weight:900;color:var(--purple)">9.7 min</div><div style="font-size:11px;color:#6B7280">Average total time</div></div>
+      <div style="text-align:center;"><div style="font-size:24px;font-weight:900;color:var(--teal)">5</div><div style="font-size:11px;color:#6B7280">Process phases</div></div>
+      <div style="text-align:center;"><div style="font-size:24px;font-weight:900;color:var(--amber)">4</div><div style="font-size:11px;color:#6B7280">Actors / systems</div></div>
+      <div style="text-align:center;"><div style="font-size:24px;font-weight:900;color:var(--red)">0</div><div style="font-size:11px;color:#6B7280">External crew needed</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     AI CONTENT PIPELINE
+═══════════════════════════════════════════════════ -->
+<div id="ai-pipe" class="section">
+  <div class="section-title">AI Content Generation Pipeline</div>
+  <div class="section-sub">Detailed flow for how a user's topic input is transformed into scripts, hashtags, hooks, and avatar scripts using the RAG + LLM architecture.</div>
+
+  <div class="flow-card">
+    <h3>Step 1 — Topic to Retrieval</h3>
+    <div class="flow-desc">The user's topic is embedded and matched against the DTF knowledge base to retrieve domain-accurate context.</div>
+    <div class="pipeline">
+      <div class="pip-step"><div class="pip-box s-blue">User enters topic<br>"DTF ink washing"</div><div class="pip-sub">Free text input</div></div>
+      <div class="pip-arrow"></div>
+      <div class="pip-step"><div class="pip-box s-purple">Embed topic<br>via Gemini<br>embedding-001</div><div class="pip-sub">1536-dim vector</div></div>
+      <div class="pip-arrow"></div>
+      <div class="pip-step"><div class="pip-box s-amber">pgvector cosine<br>similarity search<br>k=5 results</div><div class="pip-sub">Supabase RPC</div></div>
+      <div class="pip-arrow"></div>
+      <div class="pip-step"><div class="pip-box s-teal">Retrieve top 5<br>DTF knowledge<br>chunks</div><div class="pip-sub">Markdown context</div></div>
+      <div class="pip-arrow"></div>
+      <div class="pip-step"><div class="pip-box s-purple">Inject context<br>into LLM<br>system prompt</div><div class="pip-sub">RAG augmentation</div></div>
+    </div>
+  </div>
+
+  <div class="flow-card" style="margin-top:20px;">
+    <h3>Step 2 — Parallel AI Generation (4 outputs from 1 topic)</h3>
+    <div class="flow-desc">The augmented prompt is sent in parallel to four specialised generation modes. Each returns a different output type.</div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:8px;">
+      <div style="border:2px solid #7C3AED; border-radius:10px; overflow:hidden;">
+        <div style="background:#7C3AED; color:white; padding:8px 14px; font-size:11px; font-weight:800; text-transform:uppercase;">Script Generation</div>
+        <div style="padding:14px; font-size:12px;">
+          <div style="margin-bottom:8px;"><span style="font-weight:700">Input:</span> Topic + RAG context + format instructions</div>
+          <div style="margin-bottom:8px;"><span style="font-weight:700">API:</span> Claude Sonnet 4.6 (primary) → Gemini Flash (fallback)</div>
+          <div style="margin-bottom:8px;"><span style="font-weight:700">Output:</span> 30-45s script with HOOK / VALUE / CTA structure</div>
+          <div><span style="font-weight:700">Time:</span> 5–12 seconds</div>
+        </div>
+      </div>
+      <div style="border:2px solid #0D9488; border-radius:10px; overflow:hidden;">
+        <div style="background:#0D9488; color:white; padding:8px 14px; font-size:11px; font-weight:800; text-transform:uppercase;">Hashtag Generation</div>
+        <div style="padding:14px; font-size:12px;">
+          <div style="margin-bottom:8px;"><span style="font-weight:700">Input:</span> Topic + DTF niche context</div>
+          <div style="margin-bottom:8px;"><span style="font-weight:700">API:</span> Groq Llama 3.1 (fast, free) → Claude fallback</div>
+          <div style="margin-bottom:8px;"><span style="font-weight:700">Output:</span> 25 tags in 4 groups: HIGH VOLUME / DTF NICHE / BUSINESS / LOCAL</div>
+          <div><span style="font-weight:700">Time:</span> 3–8 seconds</div>
+        </div>
+      </div>
+      <div style="border:2px solid #D97706; border-radius:10px; overflow:hidden;">
+        <div style="background:#D97706; color:white; padding:8px 14px; font-size:11px; font-weight:800; text-transform:uppercase;">Hook Concept Generation</div>
+        <div style="padding:14px; font-size:12px;">
+          <div style="margin-bottom:8px;"><span style="font-weight:700">Input:</span> Topic + social media hook frameworks</div>
+          <div style="margin-bottom:8px;"><span style="font-weight:700">API:</span> Claude Sonnet 4.6</div>
+          <div style="margin-bottom:8px;"><span style="font-weight:700">Output:</span> 5 × hook concepts each with VISUAL / AUDIO / PATTERN INTERRUPT</div>
+          <div><span style="font-weight:700">Time:</span> 8–14 seconds</div>
+        </div>
+      </div>
+      <div style="border:2px solid #4C1D95; border-radius:10px; overflow:hidden;">
+        <div style="background:#4C1D95; color:white; padding:8px 14px; font-size:11px; font-weight:800; text-transform:uppercase;">Avatar Script Generation</div>
+        <div style="padding:14px; font-size:12px;">
+          <div style="margin-bottom:8px;"><span style="font-weight:700">Input:</span> Topic + talking-head format + stage direction instructions</div>
+          <div style="margin-bottom:8px;"><span style="font-weight:700">API:</span> Claude Sonnet 4.6</div>
+          <div style="margin-bottom:8px;"><span style="font-weight:700">Output:</span> 60-90s script with [PAUSE], [SMILE], [GESTURE] markers</div>
+          <div><span style="font-weight:700">Time:</span> 10–15 seconds</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="flow-card" style="margin-top:20px;">
+    <h3>Step 3 — Output Delivery to Editor</h3>
+    <div class="flow-desc">Generated outputs are displayed in the AI panel. Users can copy, add to timeline, or pass to avatar generation.</div>
+    <div class="pipeline">
+      <div class="pip-step"><div class="pip-box s-purple">AI returns<br>formatted text</div></div>
+      <div class="pip-arrow"></div>
+      <div class="pip-step"><div class="pip-box s-blue">Display in<br>AI output panel</div><div class="pip-sub">Markdown rendered</div></div>
+      <div class="pip-arrow"></div>
+      <div class="pip-step"><div class="pip-box s-teal">User reviews<br>&amp; selects</div></div>
+      <div class="pip-arrow"></div>
+      <div class="pip-step"><div class="pip-box s-amber">Copy to<br>clipboard</div><div class="pip-sub">Or…</div></div>
+      <div class="pip-arrow"></div>
+      <div class="pip-step"><div class="pip-box s-green">Add text layer<br>to timeline</div><div class="pip-sub">Or…</div></div>
+      <div class="pip-arrow"></div>
+      <div class="pip-step"><div class="pip-box s-purple">Pass to<br>HeyGen avatar<br>generator</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     AVATAR FLOW
+═══════════════════════════════════════════════════ -->
+<div id="avatar" class="section">
+  <div class="section-title">Avatar Video Generation Flow</div>
+  <div class="section-sub">Two-phase process: one-time persona setup, then per-video generation using the saved avatar and cloned voice.</div>
+
+  <div class="flow-card">
+    <h3>Phase A: Initial Avatar Setup (One-time, ~8 minutes)</h3>
+    <div class="flow-desc">Run once per persona. Creates a permanent avatar ID and cloned voice ID that are reused for every video.</div>
+    <div class="swimlane">
+      <div class="swimlane-inner">
+        <div style="display:flex;background:#4C1D95;color:white;border-radius:8px 8px 0 0;">
+          <div style="width:120px;flex-shrink:0;padding:8px 14px;font-size:10px;font-weight:800;text-transform:uppercase;border-right:1px solid rgba(255,255,255,0.2);">Step</div>
+          <div style="flex:1;padding:8px 14px;font-size:10px;font-weight:800;text-transform:uppercase;">User Action</div>
+          <div style="flex:1;padding:8px 14px;font-size:10px;font-weight:800;text-transform:uppercase;border-left:1px solid rgba(255,255,255,0.2);">DTFStudio</div>
+          <div style="flex:1;padding:8px 14px;font-size:10px;font-weight:800;text-transform:uppercase;border-left:1px solid rgba(255,255,255,0.2);">External API</div>
+          <div style="width:100px;flex-shrink:0;padding:8px 14px;font-size:10px;font-weight:800;text-transform:uppercase;border-left:1px solid rgba(255,255,255,0.2);">Output</div>
+        </div>
+        <div class="lane">
+          <div class="lane-label" style="font-size:11px;font-weight:900;color:var(--purple)">1 · Photo</div>
+          <div class="lane-content"><div class="step-box s-blue" style="width:140px">Upload front-facing JPG/PNG (well-lit, neutral BG)</div></div>
+          <div class="lane-content"><div class="step-box s-purple" style="width:140px">Validate file format; upload to Supabase Storage</div></div>
+          <div class="lane-content"><div class="step-box s-teal" style="width:140px">HeyGen POST /v2/avatars/photo with photo URL</div></div>
+          <div class="lane-content" style="width:100px"><div class="step-box s-green" style="width:80px">Job ID returned</div></div>
+        </div>
+        <div class="lane">
+          <div class="lane-label" style="font-size:11px;font-weight:900;color:var(--purple)">2 · Voice</div>
+          <div class="lane-content"><div class="step-box s-blue" style="width:140px">Record 30s voice sample OR upload WAV/MP3</div></div>
+          <div class="lane-content"><div class="step-box s-purple" style="width:140px">Browser MediaRecorder API captures; sends to ElevenLabs</div></div>
+          <div class="lane-content"><div class="step-box s-teal" style="width:140px">ElevenLabs POST /v1/voices/add with audio file</div></div>
+          <div class="lane-content" style="width:100px"><div class="step-box s-green" style="width:80px">Voice ID returned</div></div>
+        </div>
+        <div class="lane">
+          <div class="lane-label" style="font-size:11px;font-weight:900;color:var(--purple)">3 · Process</div>
+          <div class="lane-content"><div class="step-box s-gray" style="width:140px">Wait for processing (progress indicator)</div></div>
+          <div class="lane-content"><div class="step-box s-purple" style="width:140px">Poll HeyGen GET /v2/avatars/{job_id} every 10s</div></div>
+          <div class="lane-content"><div class="step-box s-teal" style="width:140px">HeyGen processes photo → avatar model (2–5 min)</div></div>
+          <div class="lane-content" style="width:100px"><div class="step-box s-green" style="width:80px">Avatar ID saved</div></div>
+        </div>
+        <div class="lane">
+          <div class="lane-label" style="font-size:11px;font-weight:900;color:var(--purple)">4 · Confirm</div>
+          <div class="lane-content"><div class="step-box s-blue" style="width:140px">Review avatar preview; confirm quality</div></div>
+          <div class="lane-content"><div class="step-box s-purple" style="width:140px">Save avatar_id + voice_id to Supabase user profile</div></div>
+          <div class="lane-content"><div class="step-box s-gray" style="width:140px">—</div></div>
+          <div class="lane-content" style="width:100px"><div class="step-box s-green" style="width:80px">Persona ready</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="flow-card" style="margin-top:20px;">
+    <h3>Phase B: Per-Video Generation (Per script, ~2 minutes)</h3>
+    <div class="flow-desc">Uses the saved avatar ID and voice ID to generate a new talking-head video for any script in under 2 minutes.</div>
+    <div class="pipeline">
+      <div class="pip-step"><div class="pip-box s-purple">AI generates<br>avatar script<br>with directions</div></div>
+      <div class="pip-arrow"></div>
+      <div class="pip-step"><div class="pip-box s-blue">User reviews<br>&amp; clicks<br>"Generate Video"</div></div>
+      <div class="pip-arrow"></div>
+      <div class="pip-step"><div class="pip-box s-teal">HeyGen POST<br>/v2/video.generate<br>avatar_id + script</div></div>
+      <div class="pip-arrow"></div>
+      <div class="pip-step"><div class="pip-box s-amber">Poll job status<br>every 15s<br>until complete</div></div>
+      <div class="pip-arrow"></div>
+      <div class="pip-step"><div class="pip-box s-green">MP4 URL returned;<br>auto-downloaded<br>to Supabase</div></div>
+      <div class="pip-arrow"></div>
+      <div class="pip-step"><div class="pip-box s-purple">Video clip<br>imported to<br>editor timeline</div></div>
+    </div>
+    <div style="margin-top:16px;padding:12px 16px;background:#F0FDF4;border-radius:8px;border-left:4px solid #16A34A;font-size:12px;">
+      <strong>⚡ D-ID Fallback:</strong> If HeyGen credits are exhausted, DTFStudio automatically retries via D-ID /talks API using the same photo URL. D-ID's free tier provides 5 credits. SadTalker via HuggingFace Space is available as a fully free (slower) alternative.
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     SYSTEM ARCHITECTURE
+═══════════════════════════════════════════════════ -->
+<div id="arch" class="section">
+  <div class="section-title">System Architecture</div>
+  <div class="section-sub">High-level and component-level architecture diagrams showing how DTFStudio's layers interact.</div>
+
+  <!-- High-level architecture -->
+  <div class="full-arch">
+    <div style="font-size:16px;font-weight:800;color:var(--purple-d);margin-bottom:6px;">High-Level Architecture</div>
+    <div style="font-size:13px;color:#6B7280;margin-bottom:24px;">Three-tier web architecture with AI services aggregation layer and persistent knowledge store.</div>
+
+    <!-- Tier 1: Client -->
+    <div class="arch-row">
+      <div class="arch-block layer-frontend" style="flex:3;">
+        <div class="arch-block-hdr" style="background:#1D4ED8;color:white;padding:8px 14px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;">CLIENT LAYER — Browser (Next.js + React)</div>
+        <div class="arch-block-body">
+          <div class="arch-pill comp-frontend">🎬 Video Editor UI</div>
+          <div class="arch-pill comp-frontend">🎞 Timeline Component</div>
+          <div class="arch-pill comp-frontend">🖌 Canvas Overlay Engine</div>
+          <div class="arch-pill comp-frontend">🤖 AI Content Panel</div>
+          <div class="arch-pill comp-frontend">🎭 Avatar Manager</div>
+          <div class="arch-pill comp-frontend">📤 Export Module</div>
+          <div class="arch-pill comp-frontend">🔑 API Key Manager</div>
+          <div class="arch-pill comp-frontend">📱 Responsive UI</div>
+        </div>
+      </div>
+      <div class="arch-connector">↕</div>
+      <div class="arch-block" style="flex:1;border:2px solid #BFDBFE;border-radius:10px;overflow:hidden;background:#EFF6FF;">
+        <div style="background:#2563EB;color:white;padding:8px 14px;font-size:10px;font-weight:800;text-transform:uppercase;">IN-BROWSER</div>
+        <div class="arch-block-body">
+          <div class="arch-pill comp-frontend">FFmpeg.wasm</div>
+          <div class="arch-pill comp-frontend">HTML5 Video</div>
+          <div class="arch-pill comp-frontend">Canvas API</div>
+          <div class="arch-pill comp-frontend">MediaRecorder</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Arrow -->
+    <div style="text-align:center;font-size:24px;color:#9CA3AF;margin:8px 0;">↕ HTTPS / REST / WebSocket</div>
+
+    <!-- Tier 2: Server -->
+    <div class="arch-row">
+      <div class="arch-block layer-backend" style="flex:1;">
+        <div class="arch-block-hdr" style="background:#15803D;color:white;padding:8px 14px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;">APPLICATION LAYER — FastAPI (Python)</div>
+        <div class="arch-block-body">
+          <div class="arch-pill comp-backend">🔀 AI Router</div>
+          <div class="arch-pill comp-backend">📚 RAG Orchestrator</div>
+          <div class="arch-pill comp-backend">🪝 Webhook Handler</div>
+          <div class="arch-pill comp-backend">📡 Avatar Job Poller</div>
+          <div class="arch-pill comp-backend">🔐 Auth Middleware</div>
+          <div class="arch-pill comp-backend">🔎 Vector Search RPC</div>
+        </div>
+      </div>
+      <div class="arch-connector">↔</div>
+      <div class="arch-block layer-ai" style="flex:1;">
+        <div class="arch-block-hdr" style="background:#7C3AED;color:white;padding:8px 14px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;">AI SERVICES LAYER</div>
+        <div class="arch-block-body">
+          <div class="arch-pill comp-ai">Claude Sonnet 4.6</div>
+          <div class="arch-pill comp-ai">Gemini 1.5 Flash</div>
+          <div class="arch-pill comp-ai">Groq Llama 3.1</div>
+          <div class="arch-pill comp-ai">HeyGen Avatar</div>
+          <div class="arch-pill comp-ai">ElevenLabs</div>
+          <div class="arch-pill comp-ai">D-ID (fallback)</div>
+          <div class="arch-pill comp-ai">Runway ML</div>
+          <div class="arch-pill comp-ai">Pika Labs</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Arrow -->
+    <div style="text-align:center;font-size:24px;color:#9CA3AF;margin:8px 0;">↕ Supabase Client SDK</div>
+
+    <!-- Tier 3: Data -->
+    <div class="arch-row">
+      <div class="arch-block layer-data" style="flex:1;">
+        <div class="arch-block-hdr" style="background:#B45309;color:white;padding:8px 14px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;">DATA LAYER — Supabase (PostgreSQL + pgvector)</div>
+        <div class="arch-block-body">
+          <div class="arch-pill comp-data">🗃 User Profiles</div>
+          <div class="arch-pill comp-data">🎭 Avatar Registry</div>
+          <div class="arch-pill comp-data">📋 Projects & Compositions</div>
+          <div class="arch-pill comp-data">📚 Knowledge Base Chunks</div>
+          <div class="arch-pill comp-data">🔢 Vector Embeddings</div>
+          <div class="arch-pill comp-data">💾 Supabase Storage (video files)</div>
+          <div class="arch-pill comp-data">🔐 Supabase Auth (JWT)</div>
+        </div>
+      </div>
+      <div class="arch-connector">|</div>
+      <div class="arch-block layer-ext" style="flex:1;">
+        <div class="arch-block-hdr" style="background:#B91C1C;color:white;padding:8px 14px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;">DEPLOYMENT</div>
+        <div class="arch-block-body">
+          <div class="arch-pill comp-ext">Vercel (Frontend)</div>
+          <div class="arch-pill comp-ext">Railway (FastAPI)</div>
+          <div class="arch-pill comp-ext">Supabase Cloud</div>
+          <div class="arch-pill comp-ext">CDN (Vercel Edge)</div>
+          <div class="arch-pill comp-ext">CI/CD (GitHub Actions)</div>
+          <div class="arch-pill comp-ext">Monitoring (Sentry)</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:20px;padding:12px 16px;background:#F5F3FF;border-radius:8px;font-size:12px;color:#4C1D95;">
+      <strong>Key architectural decisions:</strong> Client-side video rendering (FFmpeg.wasm) eliminates server egress costs. API keys stored only in the browser (never server) to avoid liability. pgvector in Supabase avoids a separate vector DB (Pinecone) during MVP. Vercel hobby tier + Railway $5 plan keeps monthly hosting cost under R 100.
+    </div>
+  </div>
+
+  <!-- Component diagram -->
+  <div class="flow-card" style="margin-top:24px;">
+    <h3>Component Architecture — Video Editor</h3>
+    <div class="flow-desc">Internal component tree of the video editor frontend module.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:8px;">
+      <div style="border:2px solid #1D4ED8;border-radius:10px;overflow:hidden;">
+        <div style="background:#1D4ED8;color:white;padding:8px 14px;font-size:10px;font-weight:800;text-transform:uppercase;">Editor Layout</div>
+        <div style="padding:12px;font-size:11px;">
+          <div style="margin-bottom:4px;">→ TopBar (tools + export)</div>
+          <div style="margin-bottom:4px;">→ LeftPanel (media, text, AI)</div>
+          <div style="margin-bottom:4px;">→ PreviewCanvas (video + overlay)</div>
+          <div style="margin-bottom:4px;">→ RightPanel (properties)</div>
+          <div>→ Timeline (tracks + playhead)</div>
+        </div>
+      </div>
+      <div style="border:2px solid #7C3AED;border-radius:10px;overflow:hidden;">
+        <div style="background:#7C3AED;color:white;padding:8px 14px;font-size:10px;font-weight:800;text-transform:uppercase;">Canvas Overlay Engine</div>
+        <div style="padding:12px;font-size:11px;">
+          <div style="margin-bottom:4px;">→ requestAnimationFrame loop</div>
+          <div style="margin-bottom:4px;">→ Render text layers (ctx.fillText)</div>
+          <div style="margin-bottom:4px;">→ Selection handles (ctx.strokeRect)</div>
+          <div style="margin-bottom:4px;">→ Mouse hit detection</div>
+          <div>→ Drag handler (% coords)</div>
+        </div>
+      </div>
+      <div style="border:2px solid #0D9488;border-radius:10px;overflow:hidden;">
+        <div style="background:#0D9488;color:white;padding:8px 14px;font-size:10px;font-weight:800;text-transform:uppercase;">Timeline Engine</div>
+        <div style="padding:12px;font-size:11px;">
+          <div style="margin-bottom:4px;">→ Time ruler (px/s zoom)</div>
+          <div style="margin-bottom:4px;">→ Video track (clip bars)</div>
+          <div style="margin-bottom:4px;">→ Audio track (waveform)</div>
+          <div style="margin-bottom:4px;">→ Text tracks (overlay bars)</div>
+          <div>→ Playhead (position: absolute)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     API INTEGRATION MAP
+═══════════════════════════════════════════════════ -->
+<div id="apis" class="section">
+  <div class="section-title">API Integration Map</div>
+  <div class="section-sub">Complete map of all external API integrations, their role, free-tier limits, and fallback chain. DTFStudio is designed to run at near-zero cost using free tiers.</div>
+
+  <div class="flow-card">
+    <h3>Text &amp; Content AI — Free Tier Chain</h3>
+    <div class="flow-desc">Three-provider chain ensures continuous operation even when one provider's free tier is exhausted.</div>
+    <div class="pipeline" style="justify-content:center;">
+      <div class="pip-step"><div class="pip-box s-purple" style="width:130px;border-width:3px;">Claude Sonnet 4.6<br><span style="font-size:9px;font-weight:400">Primary</span></div><div class="pip-sub">Anthropic API<br>Paid but affordable</div></div>
+      <div class="pip-arrow"></div>
+      <div class="pip-step"><div class="pip-box s-teal" style="width:130px">Gemini 1.5 Flash<br><span style="font-size:9px;font-weight:400">First fallback</span></div><div class="pip-sub">1,500 req/day FREE</div></div>
+      <div class="pip-arrow"></div>
+      <div class="pip-step"><div class="pip-box s-green" style="width:130px">Groq Llama 3.1<br><span style="font-size:9px;font-weight:400">Second fallback</span></div><div class="pip-sub">30 req/min FREE</div></div>
+      <div class="pip-arrow"></div>
+      <div class="pip-step"><div class="pip-box s-gray" style="width:130px">HuggingFace<br><span style="font-size:9px;font-weight:400">Emergency fallback</span></div><div class="pip-sub">Free (slow)</div></div>
+    </div>
+  </div>
+
+  <div class="flow-card" style="margin-top:20px;">
+    <h3>Complete API Specification Table</h3>
+    <table>
+      <tr>
+        <th>API</th>
+        <th>Provider</th>
+        <th>Module</th>
+        <th>Free Tier</th>
+        <th>Priority</th>
+        <th>Fallback</th>
+      </tr>
+      <tr>
+        <td><strong>Claude Sonnet 4.6</strong></td>
+        <td>Anthropic</td>
+        <td>Script, Hashtags, Hooks, Avatar Script</td>
+        <td><span class="badge badge-paid">Paid API</span></td>
+        <td><span class="badge badge-must">MUST</span></td>
+        <td>Gemini Flash</td>
+      </tr>
+      <tr>
+        <td><strong>Gemini 1.5 Flash</strong></td>
+        <td>Google AI</td>
+        <td>Text generation fallback + Embeddings</td>
+        <td><span class="badge badge-free">FREE 1,500/day</span></td>
+        <td><span class="badge badge-must">MUST</span></td>
+        <td>Groq</td>
+      </tr>
+      <tr>
+        <td><strong>Groq (Llama 3.1 70B)</strong></td>
+        <td>Groq</td>
+        <td>Fast hashtag generation</td>
+        <td><span class="badge badge-free">FREE 30 req/min</span></td>
+        <td><span class="badge badge-should">SHOULD</span></td>
+        <td>HuggingFace</td>
+      </tr>
+      <tr>
+        <td><strong>HeyGen Instant Avatar</strong></td>
+        <td>HeyGen</td>
+        <td>Avatar creation + Video generation</td>
+        <td><span class="badge badge-trial">5 FREE credits</span></td>
+        <td><span class="badge badge-must">MUST (P2)</span></td>
+        <td>D-ID</td>
+      </tr>
+      <tr>
+        <td><strong>ElevenLabs</strong></td>
+        <td>ElevenLabs</td>
+        <td>Voice cloning + TTS</td>
+        <td><span class="badge badge-free">FREE 10k chars/mo</span></td>
+        <td><span class="badge badge-must">MUST (P2)</span></td>
+        <td>Edge-TTS</td>
+      </tr>
+      <tr>
+        <td><strong>D-ID</strong></td>
+        <td>D-ID</td>
+        <td>Avatar video fallback</td>
+        <td><span class="badge badge-trial">5 FREE credits</span></td>
+        <td><span class="badge badge-should">SHOULD</span></td>
+        <td>SadTalker (HF)</td>
+      </tr>
+      <tr>
+        <td><strong>Edge-TTS</strong></td>
+        <td>Microsoft</td>
+        <td>Basic TTS (no cloning)</td>
+        <td><span class="badge badge-free">100% FREE</span></td>
+        <td><span class="badge badge-should">SHOULD</span></td>
+        <td>gTTS</td>
+      </tr>
+      <tr>
+        <td><strong>Runway ML Gen-3</strong></td>
+        <td>Runway</td>
+        <td>AI visual hook generation</td>
+        <td><span class="badge badge-trial">125 FREE credits</span></td>
+        <td><span class="badge badge-could">COULD</span></td>
+        <td>Pika 2.0</td>
+      </tr>
+      <tr>
+        <td><strong>Pika Labs 2.0</strong></td>
+        <td>Pika</td>
+        <td>Visual hook fallback</td>
+        <td><span class="badge badge-trial">Limited FREE</span></td>
+        <td><span class="badge badge-could">COULD</span></td>
+        <td>Stable Video Diffusion</td>
+      </tr>
+      <tr>
+        <td><strong>Supabase</strong></td>
+        <td>Supabase</td>
+        <td>Database, Auth, Storage, pgvector</td>
+        <td><span class="badge badge-free">FREE 500MB DB, 1GB Storage</span></td>
+        <td><span class="badge badge-must">MUST</span></td>
+        <td>PlanetScale + Pinecone</td>
+      </tr>
+      <tr>
+        <td><strong>Vercel</strong></td>
+        <td>Vercel</td>
+        <td>Frontend hosting + Edge functions</td>
+        <td><span class="badge badge-free">FREE Hobby tier</span></td>
+        <td><span class="badge badge-must">MUST</span></td>
+        <td>Netlify</td>
+      </tr>
+      <tr>
+        <td><strong>FFmpeg.wasm</strong></td>
+        <td>Open Source</td>
+        <td>In-browser video processing + export</td>
+        <td><span class="badge badge-free">100% FREE</span></td>
+        <td><span class="badge badge-must">MUST</span></td>
+        <td>Server-side FFmpeg</td>
+      </tr>
+      <tr>
+        <td><strong>HuggingFace Inference</strong></td>
+        <td>HuggingFace</td>
+        <td>Emergency text + SadTalker avatar</td>
+        <td><span class="badge badge-free">FREE (rate limited)</span></td>
+        <td><span class="badge badge-could">COULD</span></td>
+        <td>Self-hosted model</td>
+      </tr>
+    </table>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     DATA FLOW
+═══════════════════════════════════════════════════ -->
+<div id="data" class="section">
+  <div class="section-title">Data Flow Diagram</div>
+  <div class="section-sub">How data moves through DTFStudio — from user input through processing to stored outputs. Three primary flows: Content Generation, Avatar Creation, and Video Export.</div>
+
+  <div class="flow-card">
+    <h3>Flow 1 — AI Content Generation</h3>
+    <div class="flow-desc">Data lineage from user topic input to generated script, hashtags, and hooks stored and displayed.</div>
+    <div style="overflow-x:auto;">
+      <table style="min-width:700px;">
+        <tr>
+          <th style="width:50px">#</th>
+          <th>Data Entity</th>
+          <th>Source</th>
+          <th>Destination</th>
+          <th>Transformation</th>
+          <th>Storage</th>
+        </tr>
+        <tr><td>1</td><td><strong>Topic string</strong></td><td>User input</td><td>FastAPI RAG router</td><td>None (raw text)</td><td>Session only</td></tr>
+        <tr><td>2</td><td><strong>Topic embedding (1536-dim)</strong></td><td>Gemini embedding-001</td><td>pgvector search function</td><td>Text → float array</td><td>Not persisted</td></tr>
+        <tr><td>3</td><td><strong>Top-5 knowledge chunks</strong></td><td>Supabase pgvector</td><td>Prompt builder</td><td>Cosine similarity retrieval</td><td>Supabase (DTF KB table)</td></tr>
+        <tr><td>4</td><td><strong>Augmented prompt</strong></td><td>Prompt builder</td><td>Claude / Gemini / Groq API</td><td>Topic + context + instructions</td><td>Not persisted</td></tr>
+        <tr><td>5</td><td><strong>Generated script (text)</strong></td><td>LLM API</td><td>Frontend AI panel</td><td>Markdown → display</td><td>Supabase (generations table)</td></tr>
+        <tr><td>6</td><td><strong>Hashtag array (25 strings)</strong></td><td>LLM API</td><td>Frontend clipboard</td><td>Text → parsed array</td><td>Supabase (generations table)</td></tr>
+        <tr><td>7</td><td><strong>Hook concepts (5 objects)</strong></td><td>LLM API</td><td>Frontend AI panel</td><td>Text → structured cards</td><td>Supabase (generations table)</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="flow-card" style="margin-top:20px;">
+    <h3>Flow 2 — Avatar Video Creation</h3>
+    <div class="flow-desc">Data lineage for avatar persona creation and per-video generation.</div>
+    <div style="overflow-x:auto;">
+      <table style="min-width:700px;">
+        <tr><th style="width:50px">#</th><th>Data Entity</th><th>Source</th><th>Destination</th><th>Transformation</th><th>Storage</th></tr>
+        <tr><td>1</td><td><strong>User photograph</strong></td><td>User upload (JPG/PNG)</td><td>Supabase Storage</td><td>Resize to 1024×1024</td><td>Supabase Storage (avatars/)</td></tr>
+        <tr><td>2</td><td><strong>Photo URL</strong></td><td>Supabase Storage</td><td>HeyGen /v2/avatars API</td><td>Signed URL generation</td><td>HeyGen servers</td></tr>
+        <tr><td>3</td><td><strong>HeyGen avatar_id</strong></td><td>HeyGen API response</td><td>Supabase user profile</td><td>UUID string</td><td>Supabase (avatars table)</td></tr>
+        <tr><td>4</td><td><strong>Voice audio (WAV)</strong></td><td>MediaRecorder / file upload</td><td>ElevenLabs /v1/voices/add</td><td>Audio normalisation</td><td>ElevenLabs servers</td></tr>
+        <tr><td>5</td><td><strong>ElevenLabs voice_id</strong></td><td>ElevenLabs response</td><td>Supabase user profile</td><td>UUID string</td><td>Supabase (avatars table)</td></tr>
+        <tr><td>6</td><td><strong>Avatar script text</strong></td><td>AI generation (Flow 1)</td><td>HeyGen /v2/video.generate</td><td>Stage directions stripped</td><td>Not persisted</td></tr>
+        <tr><td>7</td><td><strong>Generated video URL</strong></td><td>HeyGen /v2/video/{id}</td><td>Supabase Storage</td><td>MP4 download + re-upload</td><td>Supabase Storage (videos/)</td></tr>
+        <tr><td>8</td><td><strong>Video clip object</strong></td><td>Supabase Storage</td><td>Editor timeline</td><td>Object URL creation</td><td>Session only (blob URL)</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="flow-card" style="margin-top:20px;">
+    <h3>Flow 3 — Video Export</h3>
+    <div class="flow-desc">How the editor's composition (video + text overlays) is rendered into a final exportable MP4.</div>
+    <div style="overflow-x:auto;">
+      <table style="min-width:700px;">
+        <tr><th style="width:50px">#</th><th>Data Entity</th><th>Source</th><th>Destination</th><th>Transformation</th></tr>
+        <tr><td>1</td><td><strong>Video element (HTML5)</strong></td><td>Blob URL from Supabase</td><td>OffscreenCanvas</td><td>drawImage() each frame</td></tr>
+        <tr><td>2</td><td><strong>Text layers (JSON array)</strong></td><td>Editor state (React)</td><td>OffscreenCanvas</td><td>ctx.fillText() per active layer</td></tr>
+        <tr><td>3</td><td><strong>Composite frames (RGBA)</strong></td><td>OffscreenCanvas</td><td>FFmpeg.wasm</td><td>Frame buffer sequence</td></tr>
+        <tr><td>4</td><td><strong>FFmpeg command</strong></td><td>Export settings (platform)</td><td>FFmpeg.wasm worker</td><td>-vf scale=1080:1920 -crf 23 -preset fast</td></tr>
+        <tr><td>5</td><td><strong>Output MP4</strong></td><td>FFmpeg.wasm Uint8Array</td><td>Browser download</td><td>Blob → object URL → &lt;a&gt; download</td></tr>
+      </table>
+    </div>
+    <div style="margin-top:12px;padding:10px 14px;background:#FEF3C7;border-radius:8px;font-size:12px;color:#78350F;">
+      <strong>⚠ FFmpeg.wasm requirement:</strong> The browser must support SharedArrayBuffer. Set headers <code>Cross-Origin-Opener-Policy: same-origin</code> and <code>Cross-Origin-Embedder-Policy: require-corp</code> in Vercel config. Test on Chrome 92+, Firefox 79+, Edge 92+. Safari 15.2+ with COOP/COEP support.
+    </div>
+  </div>
+
+  <!-- Database schema summary -->
+  <div class="flow-card" style="margin-top:20px;">
+    <h3>Supabase Database Schema (Key Tables)</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:8px;">
+      <div style="border:1px solid #FCD34D;border-radius:8px;overflow:hidden;background:#FFFBEB;">
+        <div style="background:#B45309;color:white;padding:6px 12px;font-size:10px;font-weight:800;">users</div>
+        <div style="padding:10px;font-size:11px;font-family:monospace;line-height:1.8;color:#374151;">
+          id: uuid PK<br>email: text<br>full_name: text<br>created_at: timestamp<br>plan: text DEFAULT 'free'
+        </div>
+      </div>
+      <div style="border:1px solid #FCD34D;border-radius:8px;overflow:hidden;background:#FFFBEB;">
+        <div style="background:#B45309;color:white;padding:6px 12px;font-size:10px;font-weight:800;">avatars</div>
+        <div style="padding:10px;font-size:11px;font-family:monospace;line-height:1.8;color:#374151;">
+          id: uuid PK<br>user_id: uuid FK<br>heygen_avatar_id: text<br>elevenlabs_voice_id: text<br>photo_url: text<br>persona_name: text
+        </div>
+      </div>
+      <div style="border:1px solid #FCD34D;border-radius:8px;overflow:hidden;background:#FFFBEB;">
+        <div style="background:#B45309;color:white;padding:6px 12px;font-size:10px;font-weight:800;">projects</div>
+        <div style="padding:10px;font-size:11px;font-family:monospace;line-height:1.8;color:#374151;">
+          id: uuid PK<br>user_id: uuid FK<br>title: text<br>composition_json: jsonb<br>export_url: text<br>platform: text
+        </div>
+      </div>
+      <div style="border:1px solid #FCD34D;border-radius:8px;overflow:hidden;background:#FFFBEB;">
+        <div style="background:#B45309;color:white;padding:6px 12px;font-size:10px;font-weight:800;">dtf_knowledge</div>
+        <div style="padding:10px;font-size:11px;font-family:monospace;line-height:1.8;color:#374151;">
+          id: bigint PK<br>content: text<br>embedding: vector(1536)<br>category: text<br>machine_type: text<br>created_at: timestamp
+        </div>
+      </div>
+      <div style="border:1px solid #FCD34D;border-radius:8px;overflow:hidden;background:#FFFBEB;">
+        <div style="background:#B45309;color:white;padding:6px 12px;font-size:10px;font-weight:800;">generations</div>
+        <div style="padding:10px;font-size:11px;font-family:monospace;line-height:1.8;color:#374151;">
+          id: uuid PK<br>user_id: uuid FK<br>type: text (script|hashtags|hooks)<br>topic: text<br>output: text<br>model_used: text
+        </div>
+      </div>
+      <div style="border:1px solid #FCD34D;border-radius:8px;overflow:hidden;background:#FFFBEB;">
+        <div style="background:#B45309;color:white;padding:6px 12px;font-size:10px;font-weight:800;">video_assets</div>
+        <div style="padding:10px;font-size:11px;font-family:monospace;line-height:1.8;color:#374151;">
+          id: uuid PK<br>user_id: uuid FK<br>project_id: uuid FK<br>storage_path: text<br>type: text (raw|avatar|export)<br>expires_at: timestamp
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function show(id) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  event.currentTarget.classList.add('active');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "name": "Pulse Artwork Studio",
+  "short_name": "Pulse Studio",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#F7F6F1",
+  "theme_color": "#E8A80C",
+  "description": "AI-powered artwork preparation for DTF printing.",
+  "orientation": "portrait-primary",
+  "prefer_related_applications": false
+}

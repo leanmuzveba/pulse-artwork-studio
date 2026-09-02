@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pulse-worker"
+version = "0.1.0"
+description = "Pulse Artwork Studio AI — Celery workers for async image & AI processing."
+requires-python = ">=3.12"
+dependencies = [
+    "celery>=5.3",
+    "redis>=5.0",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "structlog>=24.1",
+    "boto3>=1.34",
+    # Image-processing deps (Pillow, OpenCV, NumPy) arrive with the first
+    # real processor in Phase 2.
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.5",
+]
+
+[tool.setuptools.packages.find]
+include = ["worker*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

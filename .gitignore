@@ -1,0 +1,57 @@
+# ---- OS ----
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- Secrets / env ----
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+env/
+dist/
+build/
+
+# ---- Node ----
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# ---- Flutter / Dart ----
+apps/web/.dart_tool/
+apps/web/.flutter-plugins
+apps/web/.flutter-plugins-dependencies
+apps/web/build/
+apps/web/.packages
+apps/web/pubspec.lock
+*.iml
+
+# ---- Docker / data ----
+.docker-data/
+*.local
+
+# ---- IDE ----
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.shared.json
+
+# ---- Object storage / uploads (never commit binary assets) ----
+storage/
+uploads/
+*.psd
+*.tiff
