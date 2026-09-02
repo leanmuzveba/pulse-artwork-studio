@@ -16,6 +16,23 @@ jobs:
     defaults:
       run:
         working-directory: services/api
+    env:
+      DATABASE_URL: postgresql+asyncpg://pulse:pulse@localhost:5432/pulse
+      JWT_SECRET: test-secret-for-ci-only
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: pulse
+          POSTGRES_PASSWORD: pulse
+          POSTGRES_DB: pulse
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pulse"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -27,5 +44,7 @@ jobs:
           pip install -e ".[dev]"
       - name: Lint
         run: ruff check .
+      - name: Migrate
+        run: alembic upgrade head
       - name: Test
         run: pytest -q

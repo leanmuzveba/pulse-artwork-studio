@@ -38,7 +38,8 @@ def test_request_id_header_present():
 
 
 def test_not_implemented_uses_error_envelope():
-    resp = client.post("/api/v1/auth/login")
+    # /exports is still a stub; asserts the 501 envelope shape.
+    resp = client.post("/api/v1/exports")
     assert resp.status_code == 501
     body = resp.json()
     assert body["error"]["code"] == "not_implemented"
