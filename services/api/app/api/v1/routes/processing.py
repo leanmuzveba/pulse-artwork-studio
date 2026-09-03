@@ -1,22 +1,161 @@
-"""Processing jobs — enqueue async work and poll status (Phase 1, next step).
+"""Processing jobs — enqueue async work and poll status.
 
-Job lifecycle: REQUESTED -> QUEUED -> PROCESSING -> COMPLETED | FAILED
+Lifecycle: REQUESTED -> QUEUED -> PROCESSING -> COMPLETED | FAILED
+
+The worker returns its result via Celery's result backend; this router
+reconciles that state into the processing_jobs row whenever the client polls.
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+import uuid
+from datetime import datetime, timezone
+from typing import Any
 
-from app.api.v1.routes._stub import not_implemented
+from fastapi import APIRouter, Depends, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.deps import get_current_user, load_owned_artwork, load_owned_project
+from app.core.errors import APIError, ErrorCode
+from app.core.logging import request_id_ctx
+from app.db.enums import ArtworkStatus, JobOperation, JobStatus
+from app.db.models import Artwork, ProcessingJob, User
+from app.db.session import get_session
+from app.schemas.common import SuccessResponse
+from app.schemas.processing import JobCreateRequest, JobResponse
+from app.services import queue
 
 router = APIRouter()
 
+# Operations available in Phase 1 (more processors land in later phases).
+SUPPORTED_OPERATIONS = {JobOperation.METADATA}
+_TERMINAL = {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}
 
-@router.post("/jobs", summary="Create a processing job")
-async def create_job() -> None:
-    raise not_implemented("Creating processing jobs")
+
+@router.post(
+    "/jobs",
+    response_model=SuccessResponse[JobResponse],
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Create a processing job (async)",
+)
+async def create_job(
+    payload: JobCreateRequest,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> SuccessResponse[JobResponse]:
+    if payload.operation not in SUPPORTED_OPERATIONS:
+        raise APIError(
+            ErrorCode.VALIDATION_ERROR,
+            f"Operation '{payload.operation.value}' is not available yet.",
+            status_code=422,
+        )
+
+    artwork = await load_owned_artwork(
+        session, user, payload.project_id, payload.artwork_id
+    )
+    if artwork.status != ArtworkStatus.READY:
+        raise APIError(
+            ErrorCode.CONFLICT,
+            "Artwork is not ready. Confirm the upload before processing.",
+            status_code=409,
+        )
+    if not artwork.storage_bucket or not artwork.storage_key:
+        raise APIError(
+            ErrorCode.CONFLICT, "Artwork has no stored file.", status_code=409
+        )
+
+    job = ProcessingJob(
+        project_id=payload.project_id,
+        artwork_id=payload.artwork_id,
+        operation=payload.operation,
+        parameters=payload.parameters,
+        status=JobStatus.QUEUED,
+    )
+    session.add(job)
+    await session.flush()  # assign job.id
+    job.task_id = queue.enqueue_job(
+        payload.operation.value,
+        job.id,
+        artwork.storage_bucket,
+        artwork.storage_key,
+        payload.parameters,
+    )
+    await session.commit()
+    await session.refresh(job)
+    return SuccessResponse(
+        data=JobResponse.model_validate(job), request_id=request_id_ctx.get()
+    )
 
 
-@router.get("/jobs/{job_id}", summary="Get a processing job's status")
-async def get_job(job_id: str) -> None:
-    raise not_implemented("Fetching job status")
+@router.get(
+    "/jobs/{job_id}",
+    response_model=SuccessResponse[JobResponse],
+    summary="Get a processing job's status",
+)
+async def get_job(
+    job_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> SuccessResponse[JobResponse]:
+    job = await session.get(ProcessingJob, job_id)
+    if job is None:
+        raise APIError(ErrorCode.NOT_FOUND, "Job not found.", status_code=404)
+    await load_owned_project(session, user, job.project_id)  # authorize
+
+    await _reconcile(job, session)
+    return SuccessResponse(
+        data=JobResponse.model_validate(job), request_id=request_id_ctx.get()
+    )
+
+
+async def _reconcile(job: ProcessingJob, session: AsyncSession) -> None:
+    """Fold the worker's Celery state into the job row. Best-effort; never raises."""
+    if job.status in _TERMINAL or not job.task_id:
+        return
+    try:
+        state, result = queue.get_job_state(job.task_id)
+    except Exception:
+        return  # broker unreachable — leave the row unchanged
+
+    now = datetime.now(timezone.utc)
+    changed = False
+
+    if state == "STARTED" and job.status != JobStatus.PROCESSING:
+        job.status = JobStatus.PROCESSING
+        job.started_at = job.started_at or now
+        changed = True
+    elif state == "SUCCESS":
+        await _apply_success(job, result, session, now)
+        changed = True
+    elif state == "FAILURE":
+        job.status = JobStatus.FAILED
+        job.error_code = "processing_error"
+        job.error_message = str(result)[:1000]
+        job.started_at = job.started_at or now
+        job.finished_at = now
+        changed = True
+
+    if changed:
+        await session.commit()
+        await session.refresh(job)
+
+
+async def _apply_success(
+    job: ProcessingJob, result: Any, session: AsyncSession, now: datetime
+) -> None:
+    # For metadata, enrich the (immutable-file) original artwork's metadata.
+    if job.operation == JobOperation.METADATA and isinstance(result, dict):
+        artwork = await session.get(Artwork, job.artwork_id)
+        if artwork is not None:
+            if result.get("width") is not None:
+                artwork.width = result["width"]
+            if result.get("height") is not None:
+                artwork.height = result["height"]
+            if result.get("source_dpi") is not None:
+                artwork.source_dpi = result["source_dpi"]
+        job.result_artwork_id = job.artwork_id
+
+    job.status = JobStatus.COMPLETED
+    job.progress = 100
+    job.started_at = job.started_at or now
+    job.finished_at = now

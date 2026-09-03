@@ -63,6 +63,9 @@ class ProcessingJob(UUIDMixin, TimestampMixin, Base):
     )
     progress: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
+    # Celery task id, used to reconcile worker state into this row on poll.
+    task_id: Mapped[str | None] = mapped_column(String(155))
+
     error_code: Mapped[str | None] = mapped_column(String(64))
     error_message: Mapped[str | None] = mapped_column(Text)
 
