@@ -18,11 +18,12 @@ class Settings(BaseSettings):
     celery_broker_url: str = "redis://localhost:6379/1"
     celery_result_backend: str = "redis://localhost:6379/2"
 
-    # Object storage (for future processors that read/write assets).
+    # Object storage: read source artworks, write derived ones.
     s3_endpoint_url: str = "http://localhost:9000"
     s3_access_key: str = "pulse-minio"
     s3_secret_key: str = "pulse-minio-secret"
     s3_region: str = "us-east-1"
+    s3_bucket_derived: str = "pulse-derived"
 
 
 @lru_cache

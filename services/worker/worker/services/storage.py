@@ -1,4 +1,4 @@
-"""Read objects from S3-compatible storage (internal endpoint)."""
+"""Read/write objects in S3-compatible storage (internal endpoint)."""
 
 from __future__ import annotations
 
@@ -23,3 +23,7 @@ def _client():
 def download_bytes(bucket: str, key: str) -> bytes:
     obj = _client().get_object(Bucket=bucket, Key=key)
     return obj["Body"].read()
+
+
+def upload_bytes(bucket: str, key: str, data: bytes, content_type: str) -> None:
+    _client().put_object(Bucket=bucket, Key=key, Body=data, ContentType=content_type)

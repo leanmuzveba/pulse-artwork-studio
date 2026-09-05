@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, load_owned_artwork, load_owned_project
 from app.core.errors import APIError, ErrorCode
 from app.core.logging import request_id_ctx
-from app.db.enums import ArtworkStatus, JobOperation, JobStatus
+from app.db.enums import ArtworkKind, ArtworkStatus, JobOperation, JobStatus
 from app.db.models import Artwork, ProcessingJob, User
 from app.db.session import get_session
 from app.schemas.common import SuccessResponse
@@ -27,8 +27,11 @@ from app.services import queue
 
 router = APIRouter()
 
-# Operations available in Phase 1 (more processors land in later phases).
-SUPPORTED_OPERATIONS = {JobOperation.METADATA}
+# Operations available so far (more processors land in later phases).
+SUPPORTED_OPERATIONS = {JobOperation.METADATA, JobOperation.ENHANCE, JobOperation.UPSCALE}
+
+# Operations that produce a new derived Artwork rather than annotating the original.
+_DERIVING_OPERATIONS = {JobOperation.ENHANCE, JobOperation.UPSCALE}
 _TERMINAL = {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}
 
 
@@ -79,6 +82,7 @@ async def create_job(
         artwork.storage_bucket,
         artwork.storage_key,
         payload.parameters,
+        payload.project_id,
     )
     await session.commit()
     await session.refresh(job)
@@ -154,6 +158,25 @@ async def _apply_success(
             if result.get("source_dpi") is not None:
                 artwork.source_dpi = result["source_dpi"]
         job.result_artwork_id = job.artwork_id
+    elif job.operation in _DERIVING_OPERATIONS and isinstance(result, dict):
+        # The original is immutable — the op's output becomes a new derived Artwork.
+        parent = await session.get(Artwork, job.artwork_id)
+        derived = Artwork(
+            project_id=job.project_id,
+            parent_artwork_id=job.artwork_id,
+            kind=ArtworkKind.DERIVED,
+            status=ArtworkStatus.READY,
+            original_filename=parent.original_filename if parent else None,
+            mime_type=result.get("mime_type"),
+            size_bytes=result.get("size_bytes"),
+            width=result.get("width"),
+            height=result.get("height"),
+            storage_bucket=result.get("bucket"),
+            storage_key=result.get("key"),
+        )
+        session.add(derived)
+        await session.flush()
+        job.result_artwork_id = derived.id
 
     job.status = JobStatus.COMPLETED
     job.progress = 100

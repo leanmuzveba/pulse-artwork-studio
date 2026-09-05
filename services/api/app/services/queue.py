@@ -32,6 +32,7 @@ def enqueue_job(
     bucket: str,
     key: str,
     parameters: dict[str, Any],
+    project_id: uuid.UUID,
 ) -> str:
     """Publish a processing task and return its Celery task id."""
     result = _celery.send_task(
@@ -42,6 +43,7 @@ def enqueue_job(
             "bucket": bucket,
             "key": key,
             "parameters": parameters,
+            "project_id": str(project_id),
         },
     )
     return result.id

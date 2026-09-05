@@ -72,7 +72,7 @@ def test_unsupported_operation_is_rejected():
     body = {
         "project_id": str(uuid.uuid4()),
         "artwork_id": str(uuid.uuid4()),
-        "operation": "enhance",  # valid enum, not yet supported
+        "operation": "vectorize",  # valid enum, not yet supported
     }
     resp = client.post("/api/v1/processing/jobs", json=body, headers=headers)
     assert resp.status_code == 422
@@ -135,6 +135,62 @@ def test_metadata_job_success_flow(monkeypatch):
         f"/api/v1/projects/{pid}/artworks/{aid}", headers=headers
     ).json()["data"]
     assert art["width"] == 1 and art["height"] == 1 and art["source_dpi"] == 300
+
+
+@pytest.mark.usefixtures("require_db", "require_storage")
+def test_upscale_job_success_creates_derived_artwork(monkeypatch):
+    from app.services import queue
+
+    monkeypatch.setattr(queue, "enqueue_job", lambda *a, **k: "fake-task-upscale")
+
+    headers = _auth_headers()
+    pid = _new_project(headers)
+    aid = _uploaded_artwork(headers, pid)
+
+    created = client.post(
+        "/api/v1/processing/jobs",
+        json={"project_id": pid, "artwork_id": aid, "operation": "upscale"},
+        headers=headers,
+    )
+    assert created.status_code == 202, created.text
+    job_id = created.json()["data"]["id"]
+
+    monkeypatch.setattr(
+        queue,
+        "get_job_state",
+        lambda task_id: (
+            "SUCCESS",
+            {
+                "width": 2,
+                "height": 2,
+                "format": "PNG",
+                "mode": "RGBA",
+                "has_alpha": True,
+                "source_dpi": None,
+                "bucket": "pulse-derived",
+                "key": f"projects/{pid}/derived/{job_id}/upscale.png",
+                "mime_type": "image/png",
+                "size_bytes": 123,
+            },
+        ),
+    )
+    polled = client.get(f"/api/v1/processing/jobs/{job_id}", headers=headers).json()["data"]
+    assert polled["status"] == "completed"
+    result_id = polled["result_artwork_id"]
+    assert result_id != aid  # a new derived artwork, not the original
+
+    derived = client.get(
+        f"/api/v1/projects/{pid}/artworks/{result_id}", headers=headers
+    ).json()["data"]
+    assert derived["width"] == 2 and derived["height"] == 2
+    assert derived["kind"] == "derived"
+
+    # The original is untouched (immutable).
+    original = client.get(
+        f"/api/v1/projects/{pid}/artworks/{aid}", headers=headers
+    ).json()["data"]
+    assert original["kind"] == "original"
+    assert original["width"] != 2
 
 
 @pytest.mark.usefixtures("require_db", "require_storage")
