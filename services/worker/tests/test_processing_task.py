@@ -51,6 +51,30 @@ def test_upscale_op_uploads_result_and_returns_location(monkeypatch):
     assert result["width"] == 20 and result["height"] == 20
 
 
+def test_background_removal_op_uploads_result_and_returns_location(monkeypatch):
+    # background_removal's transform is rembg (real model) — swap it out here so
+    # this test exercises the task's dispatch/upload plumbing, not segmentation.
+    monkeypatch.setattr(processing.run, "update_state", lambda *a, **k: None)
+    monkeypatch.setattr(storage, "download_bytes", lambda bucket, key: _png(10, 10))
+    monkeypatch.setitem(
+        processing._TRANSFORMS, "background_removal", lambda data, params: _png(10, 10)
+    )
+    uploaded = {}
+
+    def fake_upload(bucket, key, data, content_type):
+        uploaded.update(bucket=bucket, key=key, data=data, content_type=content_type)
+
+    monkeypatch.setattr(storage, "upload_bytes", fake_upload)
+
+    result = processing.run.run(
+        "job-4", "background_removal", "pulse-originals", "src.png", {}, "proj-2"
+    )
+
+    assert uploaded["bucket"] == "pulse-derived"
+    assert uploaded["key"] == "projects/proj-2/derived/job-4/background_removal.png"
+    assert result["bucket"] == "pulse-derived"
+
+
 def test_unsupported_operation_raises():
     with pytest.raises(ValueError):
         processing.run.run("job-3", "vectorize", "b", "k")

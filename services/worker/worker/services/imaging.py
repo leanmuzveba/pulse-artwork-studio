@@ -3,9 +3,11 @@ easy to test in isolation."""
 
 from __future__ import annotations
 
+from functools import lru_cache
 from io import BytesIO
 from typing import Any
 
+import rembg
 from PIL import Image, ImageEnhance, ImageOps
 
 # Upscale is capped to avoid a single job exhausting worker memory/CPU.
@@ -90,3 +92,22 @@ def upscale(data: bytes, parameters: dict[str, Any] | None = None) -> bytes:
         out = BytesIO()
         resized.save(out, format="PNG")
         return out.getvalue()
+
+
+@lru_cache(maxsize=1)
+def _background_removal_session():
+    """Load the U^2-Net model once per worker process and reuse it across jobs."""
+    return rembg.new_session("u2net")
+
+
+def remove_background(data: bytes, parameters: dict[str, Any] | None = None) -> bytes:
+    """Remove the background, producing a transparent PNG (via rembg/U^2-Net).
+
+    Optional `parameters.alpha_matting` (bool, default False) trades speed for
+    softer edges on foreground objects with fine detail (hair, fur).
+    """
+    parameters = parameters or {}
+    alpha_matting = bool(parameters.get("alpha_matting", False))
+    return rembg.remove(
+        data, session=_background_removal_session(), alpha_matting=alpha_matting
+    )

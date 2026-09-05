@@ -6,7 +6,8 @@ import io
 
 from PIL import Image
 
-from worker.services.imaging import enhance, extract_metadata, upscale
+from worker.services import imaging
+from worker.services.imaging import enhance, extract_metadata, remove_background, upscale
 
 
 def _png(width: int, height: int, mode: str = "RGBA") -> bytes:
@@ -53,3 +54,41 @@ def test_enhance_preserves_opaque_mode():
     out = enhance(_png(50, 50, "RGB"), {})
     meta = extract_metadata(out)
     assert meta["has_alpha"] is False
+
+
+# remove_background wraps rembg (a real ONNX model) — the actual segmentation is
+# rembg's problem to test; these tests only verify our wiring (session reuse,
+# parameter passthrough) at that boundary, so no model download is needed here.
+
+
+def test_remove_background_passes_input_and_parameters_through(monkeypatch):
+    imaging._background_removal_session.cache_clear()
+    monkeypatch.setattr(imaging.rembg, "new_session", lambda name: f"session:{name}")
+    calls = []
+
+    def fake_remove(data, session=None, alpha_matting=False):
+        calls.append((data, session, alpha_matting))
+        return b"fake-output"
+
+    monkeypatch.setattr(imaging.rembg, "remove", fake_remove)
+
+    out = remove_background(b"input-bytes", {"alpha_matting": True})
+
+    assert out == b"fake-output"
+    assert calls == [(b"input-bytes", "session:u2net", True)]
+
+
+def test_remove_background_reuses_cached_session(monkeypatch):
+    imaging._background_removal_session.cache_clear()
+    session_calls = []
+    monkeypatch.setattr(
+        imaging.rembg, "new_session", lambda name: session_calls.append(name) or "sess"
+    )
+    monkeypatch.setattr(
+        imaging.rembg, "remove", lambda data, session=None, alpha_matting=False: b"x"
+    )
+
+    remove_background(b"a")
+    remove_background(b"b")
+
+    assert len(session_calls) == 1

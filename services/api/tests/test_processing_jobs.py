@@ -194,6 +194,27 @@ def test_upscale_job_success_creates_derived_artwork(monkeypatch):
 
 
 @pytest.mark.usefixtures("require_db", "require_storage")
+@pytest.mark.parametrize(
+    "operation", ["metadata", "enhance", "upscale", "background_removal"]
+)
+def test_supported_operations_are_accepted(monkeypatch, operation):
+    from app.services import queue
+
+    monkeypatch.setattr(queue, "enqueue_job", lambda *a, **k: "fake-task")
+
+    headers = _auth_headers()
+    pid = _new_project(headers)
+    aid = _uploaded_artwork(headers, pid)
+
+    resp = client.post(
+        "/api/v1/processing/jobs",
+        json={"project_id": pid, "artwork_id": aid, "operation": operation},
+        headers=headers,
+    )
+    assert resp.status_code == 202, resp.text
+
+
+@pytest.mark.usefixtures("require_db", "require_storage")
 def test_metadata_job_failure_flow(monkeypatch):
     from app.services import queue
 

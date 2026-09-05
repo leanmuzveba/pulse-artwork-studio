@@ -28,10 +28,19 @@ from app.services import queue
 router = APIRouter()
 
 # Operations available so far (more processors land in later phases).
-SUPPORTED_OPERATIONS = {JobOperation.METADATA, JobOperation.ENHANCE, JobOperation.UPSCALE}
+SUPPORTED_OPERATIONS = {
+    JobOperation.METADATA,
+    JobOperation.ENHANCE,
+    JobOperation.UPSCALE,
+    JobOperation.BACKGROUND_REMOVAL,
+}
 
 # Operations that produce a new derived Artwork rather than annotating the original.
-_DERIVING_OPERATIONS = {JobOperation.ENHANCE, JobOperation.UPSCALE}
+_DERIVING_OPERATIONS = {
+    JobOperation.ENHANCE,
+    JobOperation.UPSCALE,
+    JobOperation.BACKGROUND_REMOVAL,
+}
 _TERMINAL = {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}
 
 

@@ -18,12 +18,13 @@ from worker.celery_app import celery_app
 from worker.config import get_settings
 from worker.services import imaging, storage
 
-SUPPORTED_OPERATIONS = {"metadata", "enhance", "upscale"}
+SUPPORTED_OPERATIONS = {"metadata", "enhance", "upscale", "background_removal"}
 
 # Operations that transform the image and need their output persisted.
 _TRANSFORMS = {
     "enhance": imaging.enhance,
     "upscale": imaging.upscale,
+    "background_removal": imaging.remove_background,
 }
 
 
