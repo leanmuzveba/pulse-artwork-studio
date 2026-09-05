@@ -25,6 +25,7 @@ class JobResponse(BaseModel):
     project_id: uuid.UUID
     artwork_id: uuid.UUID
     result_artwork_id: uuid.UUID | None
+    result_data: dict[str, Any] | None
     operation: JobOperation
     status: JobStatus
     progress: int

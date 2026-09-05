@@ -14,6 +14,11 @@ from PIL import Image, ImageEnhance, ImageOps
 MAX_UPSCALE_FACTOR = 4.0
 MAX_UPSCALE_DIMENSION = 8000
 
+# DTF print-readiness thresholds.
+DTF_RECOMMENDED_DPI = 300
+DTF_MIN_ACCEPTABLE_DPI = 150
+DTF_MIN_DIMENSION_PX = 100
+
 
 def _clamp(value: float, low: float, high: float) -> float:
     return max(low, min(high, value))
@@ -37,6 +42,82 @@ def extract_metadata(data: bytes) -> dict[str, Any]:
             "has_alpha": bool(has_alpha),
             "source_dpi": source_dpi,
         }
+
+
+def dtf_check(data: bytes, parameters: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Analyze an artwork for DTF print-readiness (the "AI Inspector").
+
+    Analysis only — no image is produced. Optional `parameters.target_width_in`
+    / `target_height_in` (inches) let the effective print DPI be computed from
+    the intended print size; otherwise the file's embedded DPI is used.
+
+    Returns the base metadata plus `effective_dpi`, a `checks` list of
+    `{code, severity, message}` (severity "warning" or "error"), and an overall
+    `ready` flag (false if any check is an "error").
+    """
+    parameters = parameters or {}
+    meta = extract_metadata(data)
+
+    effective_dpi = meta["source_dpi"]
+    target_width_in = parameters.get("target_width_in")
+    target_height_in = parameters.get("target_height_in")
+    if target_width_in:
+        effective_dpi = round(meta["width"] / float(target_width_in))
+    elif target_height_in:
+        effective_dpi = round(meta["height"] / float(target_height_in))
+
+    checks: list[dict[str, str]] = []
+
+    if effective_dpi is not None and effective_dpi < DTF_MIN_ACCEPTABLE_DPI:
+        checks.append(
+            {
+                "code": "low_resolution",
+                "severity": "error",
+                "message": f"Effective resolution is {effective_dpi} DPI; "
+                f"DTF printing needs at least {DTF_MIN_ACCEPTABLE_DPI} DPI.",
+            }
+        )
+    elif effective_dpi is not None and effective_dpi < DTF_RECOMMENDED_DPI:
+        checks.append(
+            {
+                "code": "low_resolution",
+                "severity": "warning",
+                "message": f"Effective resolution is {effective_dpi} DPI; "
+                f"{DTF_RECOMMENDED_DPI} DPI is recommended for crisp DTF prints.",
+            }
+        )
+
+    if not meta["has_alpha"]:
+        checks.append(
+            {
+                "code": "no_transparency",
+                "severity": "warning",
+                "message": "No transparency detected — run background removal "
+                "before printing, unless a full-bleed background is intended.",
+            }
+        )
+
+    if meta["mode"] not in ("RGB", "RGBA"):
+        checks.append(
+            {
+                "code": "unsupported_color_mode",
+                "severity": "warning",
+                "message": f"Image is in {meta['mode']} mode; convert to RGB/RGBA.",
+            }
+        )
+
+    if meta["width"] < DTF_MIN_DIMENSION_PX or meta["height"] < DTF_MIN_DIMENSION_PX:
+        checks.append(
+            {
+                "code": "image_too_small",
+                "severity": "error",
+                "message": f"Image is {meta['width']}x{meta['height']}px; "
+                f"at least {DTF_MIN_DIMENSION_PX}x{DTF_MIN_DIMENSION_PX}px is needed.",
+            }
+        )
+
+    ready = not any(c["severity"] == "error" for c in checks)
+    return {**meta, "effective_dpi": effective_dpi, "checks": checks, "ready": ready}
 
 
 def enhance(data: bytes, parameters: dict[str, Any] | None = None) -> bytes:

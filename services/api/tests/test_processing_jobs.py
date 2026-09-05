@@ -194,8 +194,47 @@ def test_upscale_job_success_creates_derived_artwork(monkeypatch):
 
 
 @pytest.mark.usefixtures("require_db", "require_storage")
+def test_dtf_check_job_success_stores_report_without_derived_artwork(monkeypatch):
+    from app.services import queue
+
+    monkeypatch.setattr(queue, "enqueue_job", lambda *a, **k: "fake-task-dtf")
+
+    headers = _auth_headers()
+    pid = _new_project(headers)
+    aid = _uploaded_artwork(headers, pid)
+
+    created = client.post(
+        "/api/v1/processing/jobs",
+        json={"project_id": pid, "artwork_id": aid, "operation": "dtf_check"},
+        headers=headers,
+    )
+    assert created.status_code == 202, created.text
+    job_id = created.json()["data"]["id"]
+
+    report = {
+        "width": 1,
+        "height": 1,
+        "format": "PNG",
+        "mode": "RGBA",
+        "has_alpha": True,
+        "source_dpi": None,
+        "effective_dpi": None,
+        "checks": [
+            {"code": "image_too_small", "severity": "error", "message": "too small"}
+        ],
+        "ready": False,
+    }
+    monkeypatch.setattr(queue, "get_job_state", lambda task_id: ("SUCCESS", report))
+
+    polled = client.get(f"/api/v1/processing/jobs/{job_id}", headers=headers).json()["data"]
+    assert polled["status"] == "completed"
+    assert polled["result_data"] == report
+    assert polled["result_artwork_id"] == aid  # inspects the original, no new artwork
+
+
+@pytest.mark.usefixtures("require_db", "require_storage")
 @pytest.mark.parametrize(
-    "operation", ["metadata", "enhance", "upscale", "background_removal"]
+    "operation", ["metadata", "enhance", "upscale", "background_removal", "dtf_check"]
 )
 def test_supported_operations_are_accepted(monkeypatch, operation):
     from app.services import queue

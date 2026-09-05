@@ -5,9 +5,11 @@ result, and returns it via Celery's result backend. The API reconciles that
 result into the processing_jobs row when the client polls job status — so the
 worker never needs database access.
 
-Operations that produce a new image (everything but `metadata`) upload their
-output to the derived-assets bucket themselves and return its location; the API
-turns that into a new derived `Artwork` row on reconcile.
+Operations that produce a new image upload their output to the derived-assets
+bucket themselves and return its location; the API turns that into a new
+derived `Artwork` row on reconcile. `metadata` and `dtf_check` are analysis-only
+— they return a result dict but no image, so the API annotates the artwork
+being inspected instead of creating a derived one.
 """
 
 from __future__ import annotations
@@ -18,7 +20,13 @@ from worker.celery_app import celery_app
 from worker.config import get_settings
 from worker.services import imaging, storage
 
-SUPPORTED_OPERATIONS = {"metadata", "enhance", "upscale", "background_removal"}
+SUPPORTED_OPERATIONS = {"metadata", "enhance", "upscale", "background_removal", "dtf_check"}
+
+# Operations that analyze the image and return a result dict, no image output.
+_ANALYSES = {
+    "metadata": lambda data, parameters: imaging.extract_metadata(data),
+    "dtf_check": imaging.dtf_check,
+}
 
 # Operations that transform the image and need their output persisted.
 _TRANSFORMS = {
@@ -45,8 +53,8 @@ def run(
     self.update_state(state="STARTED", meta={"job_id": job_id, "operation": operation})
     data = storage.download_bytes(bucket, key)
 
-    if operation == "metadata":
-        return imaging.extract_metadata(data)
+    if operation in _ANALYSES:
+        return _ANALYSES[operation](data, parameters or {})
 
     output = _TRANSFORMS[operation](data, parameters or {})
     result = imaging.extract_metadata(output)

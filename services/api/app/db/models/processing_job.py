@@ -66,6 +66,11 @@ class ProcessingJob(UUIDMixin, TimestampMixin, Base):
     # Celery task id, used to reconcile worker state into this row on poll.
     task_id: Mapped[str | None] = mapped_column(String(155))
 
+    # Structured output for analysis-only operations (e.g. dtf_check's checks
+    # list). Operations that produce a derived image use result_artwork_id
+    # instead and leave this null.
+    result_data: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+
     error_code: Mapped[str | None] = mapped_column(String(64))
     error_message: Mapped[str | None] = mapped_column(Text)
 

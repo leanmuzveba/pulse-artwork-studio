@@ -7,7 +7,13 @@ import io
 from PIL import Image
 
 from worker.services import imaging
-from worker.services.imaging import enhance, extract_metadata, remove_background, upscale
+from worker.services.imaging import (
+    dtf_check,
+    enhance,
+    extract_metadata,
+    remove_background,
+    upscale,
+)
 
 
 def _png(width: int, height: int, mode: str = "RGBA") -> bytes:
@@ -54,6 +60,45 @@ def test_enhance_preserves_opaque_mode():
     out = enhance(_png(50, 50, "RGB"), {})
     meta = extract_metadata(out)
     assert meta["has_alpha"] is False
+
+
+def test_dtf_check_passes_a_clean_large_image():
+    report = dtf_check(_png(200, 200, "RGBA"))
+    assert report["checks"] == []
+    assert report["ready"] is True
+    assert report["effective_dpi"] is None  # no source DPI and no target size given
+
+
+def test_dtf_check_computes_effective_dpi_from_target_width():
+    report = dtf_check(_png(100, 100, "RGBA"), {"target_width_in": 10})
+    assert report["effective_dpi"] == 10
+    codes = {c["code"]: c["severity"] for c in report["checks"]}
+    assert codes["low_resolution"] == "error"
+    assert report["ready"] is False
+
+
+def test_dtf_check_warns_below_recommended_dpi_but_still_ready():
+    report = dtf_check(_png(200, 200, "RGBA"), {"target_width_in": 1})
+    assert report["effective_dpi"] == 200
+    codes = {c["code"]: c["severity"] for c in report["checks"]}
+    assert codes["low_resolution"] == "warning"
+    assert report["ready"] is True  # warnings alone don't block readiness
+
+
+def test_dtf_check_flags_no_transparency_and_small_size():
+    report = dtf_check(_png(50, 50, "RGB"))
+    codes = {c["code"]: c["severity"] for c in report["checks"]}
+    assert codes["no_transparency"] == "warning"
+    assert codes["image_too_small"] == "error"
+    assert report["ready"] is False
+
+
+def test_dtf_check_flags_unsupported_color_mode():
+    buf = io.BytesIO()
+    Image.new("L", (150, 150), 128).save(buf, format="PNG")
+    report = dtf_check(buf.getvalue())
+    codes = {c["code"] for c in report["checks"]}
+    assert "unsupported_color_mode" in codes
 
 
 # remove_background wraps rembg (a real ONNX model) — the actual segmentation is

@@ -75,6 +75,17 @@ def test_background_removal_op_uploads_result_and_returns_location(monkeypatch):
     assert result["bucket"] == "pulse-derived"
 
 
+def test_dtf_check_op_does_not_touch_storage_writes(monkeypatch):
+    monkeypatch.setattr(processing.run, "update_state", lambda *a, **k: None)
+    monkeypatch.setattr(storage, "download_bytes", lambda bucket, key: _png(50, 50))
+    monkeypatch.setattr(
+        storage, "upload_bytes", lambda *a, **k: pytest.fail("dtf_check should not upload")
+    )
+
+    result = processing.run.run("job-5", "dtf_check", "b", "k")
+    assert "checks" in result and "ready" in result
+
+
 def test_unsupported_operation_raises():
     with pytest.raises(ValueError):
         processing.run.run("job-3", "vectorize", "b", "k")

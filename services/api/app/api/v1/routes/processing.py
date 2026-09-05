@@ -33,6 +33,7 @@ SUPPORTED_OPERATIONS = {
     JobOperation.ENHANCE,
     JobOperation.UPSCALE,
     JobOperation.BACKGROUND_REMOVAL,
+    JobOperation.DTF_CHECK,
 }
 
 # Operations that produce a new derived Artwork rather than annotating the original.
@@ -166,6 +167,10 @@ async def _apply_success(
                 artwork.height = result["height"]
             if result.get("source_dpi") is not None:
                 artwork.source_dpi = result["source_dpi"]
+        job.result_artwork_id = job.artwork_id
+    elif job.operation == JobOperation.DTF_CHECK and isinstance(result, dict):
+        # Analysis only — the report is the result, no image is produced.
+        job.result_data = result
         job.result_artwork_id = job.artwork_id
     elif job.operation in _DERIVING_OPERATIONS and isinstance(result, dict):
         # The original is immutable — the op's output becomes a new derived Artwork.
