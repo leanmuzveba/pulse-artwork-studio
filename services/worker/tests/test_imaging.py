@@ -13,6 +13,7 @@ from worker.services.imaging import (
     extract_metadata,
     remove_background,
     upscale,
+    vectorize,
 )
 
 
@@ -137,3 +138,44 @@ def test_remove_background_reuses_cached_session(monkeypatch):
     remove_background(b"b")
 
     assert len(session_calls) == 1
+
+
+# vectorize wraps vtracer (a native Rust extension) — the actual tracing is
+# vtracer's problem to test; these tests only verify our wiring (input
+# normalization, parameter passthrough, output encoding) at that boundary.
+# vtracer itself segfaults on this machine's Python 3.14 (see project memory),
+# so it must stay mocked here — real tracing is exercised by CI on Python 3.12.
+
+
+def test_vectorize_normalizes_input_and_passes_parameters(monkeypatch):
+    calls = []
+
+    def fake_convert(png_bytes, img_format="png", **kwargs):
+        calls.append((img_format, kwargs))
+        return "<svg>fake</svg>"
+
+    monkeypatch.setattr(imaging.vtracer, "convert_raw_image_to_svg", fake_convert)
+
+    out = vectorize(
+        _png(10, 10, "RGB"),
+        {"mode": "polygon", "color_precision": 4, "filter_speckle": 2},
+    )
+
+    assert out == b"<svg>fake</svg>"
+    assert len(calls) == 1
+    img_format, kwargs = calls[0]
+    assert img_format == "png"
+    assert kwargs == {"mode": "polygon", "color_precision": 4, "filter_speckle": 2}
+
+
+def test_vectorize_uses_default_parameters(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        imaging.vtracer,
+        "convert_raw_image_to_svg",
+        lambda png_bytes, img_format="png", **kwargs: calls.append(kwargs) or "<svg/>",
+    )
+
+    vectorize(_png(10, 10, "RGBA"))
+
+    assert calls == [{"mode": "spline", "color_precision": 6, "filter_speckle": 4}]

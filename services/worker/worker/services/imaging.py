@@ -8,6 +8,7 @@ from io import BytesIO
 from typing import Any
 
 import rembg
+import vtracer
 from PIL import Image, ImageEnhance, ImageOps
 
 # Upscale is capped to avoid a single job exhausting worker memory/CPU.
@@ -192,3 +193,34 @@ def remove_background(data: bytes, parameters: dict[str, Any] | None = None) -> 
     return rembg.remove(
         data, session=_background_removal_session(), alpha_matting=alpha_matting
     )
+
+
+def vectorize(data: bytes, parameters: dict[str, Any] | None = None) -> bytes:
+    """Trace a raster image into a real path-based SVG (via vtracer).
+
+    The input is normalized to RGBA PNG first (vtracer needs a raw pixel
+    format it understands), then traced. Optional `parameters`: `mode`
+    ("spline", "polygon", or "none"; default "spline"), `color_precision`
+    (default 6), `filter_speckle` (default 4, suppresses tiny noise regions).
+
+    Returns UTF-8-encoded SVG markup, not a raster image.
+    """
+    parameters = parameters or {}
+    mode = parameters.get("mode", "spline")
+    color_precision = int(parameters.get("color_precision", 6))
+    filter_speckle = int(parameters.get("filter_speckle", 4))
+
+    with Image.open(BytesIO(data)) as img:
+        img.load()
+        png_buf = BytesIO()
+        img.convert("RGBA").save(png_buf, format="PNG")
+        png_bytes = png_buf.getvalue()
+
+    svg = vtracer.convert_raw_image_to_svg(
+        png_bytes,
+        img_format="png",
+        mode=mode,
+        color_precision=color_precision,
+        filter_speckle=filter_speckle,
+    )
+    return svg.encode("utf-8")
