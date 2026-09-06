@@ -67,12 +67,15 @@ def test_create_job_requires_auth():
 
 
 @pytest.mark.usefixtures("require_db")
-def test_unsupported_operation_is_rejected():
+def test_unknown_operation_is_rejected():
+    # Every JobOperation enum value is implemented as of Phase 3, so there's no
+    # "valid enum, not yet supported" case left — this exercises pydantic's own
+    # enum validation for a value outside the enum entirely.
     headers = _auth_headers()
     body = {
         "project_id": str(uuid.uuid4()),
         "artwork_id": str(uuid.uuid4()),
-        "operation": "vectorize",  # valid enum, not yet supported
+        "operation": "not-a-real-operation",
     }
     resp = client.post("/api/v1/processing/jobs", json=body, headers=headers)
     assert resp.status_code == 422
@@ -233,8 +236,64 @@ def test_dtf_check_job_success_stores_report_without_derived_artwork(monkeypatch
 
 
 @pytest.mark.usefixtures("require_db", "require_storage")
+def test_vectorize_job_success_creates_svg_derived_artwork(monkeypatch):
+    from app.services import queue
+
+    monkeypatch.setattr(queue, "enqueue_job", lambda *a, **k: "fake-task-vectorize")
+
+    headers = _auth_headers()
+    pid = _new_project(headers)
+    aid = _uploaded_artwork(headers, pid)
+
+    created = client.post(
+        "/api/v1/processing/jobs",
+        json={"project_id": pid, "artwork_id": aid, "operation": "vectorize"},
+        headers=headers,
+    )
+    assert created.status_code == 202, created.text
+    job_id = created.json()["data"]["id"]
+
+    monkeypatch.setattr(
+        queue,
+        "get_job_state",
+        lambda task_id: (
+            "SUCCESS",
+            {
+                "width": None,
+                "height": None,
+                "bucket": "pulse-derived",
+                "key": f"projects/{pid}/derived/{job_id}/vectorize.svg",
+                "mime_type": "image/svg+xml",
+                "size_bytes": 42,
+            },
+        ),
+    )
+    polled = client.get(f"/api/v1/processing/jobs/{job_id}", headers=headers).json()["data"]
+    assert polled["status"] == "completed"
+    result_id = polled["result_artwork_id"]
+    assert result_id != aid
+
+    derived = client.get(
+        f"/api/v1/projects/{pid}/artworks/{result_id}", headers=headers
+    ).json()["data"]
+    assert derived["kind"] == "derived"
+    assert derived["mime_type"] == "image/svg+xml"
+    assert derived["width"] is None and derived["height"] is None
+
+
+@pytest.mark.usefixtures("require_db", "require_storage")
 @pytest.mark.parametrize(
-    "operation", ["metadata", "enhance", "upscale", "background_removal", "dtf_check"]
+    "operation",
+    [
+        "metadata",
+        "enhance",
+        "upscale",
+        "background_removal",
+        "halftone",
+        "embroidery",
+        "vectorize",
+        "dtf_check",
+    ],
 )
 def test_supported_operations_are_accepted(monkeypatch, operation):
     from app.services import queue

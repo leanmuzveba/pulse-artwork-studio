@@ -9,10 +9,12 @@ from PIL import Image
 from worker.services import imaging
 from worker.services.imaging import (
     dtf_check,
+    embroidery,
     enhance,
     export_pdf,
     export_png,
     extract_metadata,
+    halftone,
     remove_background,
     upscale,
     vectorize,
@@ -205,3 +207,41 @@ def test_export_png_resizes_by_explicit_width_and_height():
 def test_export_pdf_flattens_transparency_onto_white():
     out = export_pdf(_png(10, 10, "RGBA"))
     assert out.startswith(b"%PDF")
+
+
+def _solid_rgb(width: int, height: int, color: tuple[int, int, int]) -> bytes:
+    buf = io.BytesIO()
+    Image.new("RGB", (width, height), color).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def test_halftone_preserves_dimensions():
+    out = halftone(_solid_rgb(20, 20, (128, 128, 128)))
+    meta = extract_metadata(out)
+    assert (meta["width"], meta["height"]) == (20, 20)
+
+
+def test_halftone_darker_input_yields_darker_output():
+    # A solid black cell should be fully dotted (near-black average); a solid
+    # white cell should stay untouched (no dots drawn).
+    dark_out = halftone(_solid_rgb(16, 16, (0, 0, 0)), {"cell_size": 8})
+    light_out = halftone(_solid_rgb(16, 16, (255, 255, 255)), {"cell_size": 8})
+
+    # Sample a cell's center, not a cell boundary — the ellipse doesn't reach
+    # into the bounding box's corners, so a boundary point stays white either way.
+    dark_pixel = Image.open(io.BytesIO(dark_out)).convert("L").getpixel((4, 4))
+    light_pixel = Image.open(io.BytesIO(light_out)).convert("L").getpixel((4, 4))
+    assert dark_pixel < light_pixel
+
+
+def test_embroidery_preserves_dimensions_and_alpha():
+    out = embroidery(_png(30, 30, "RGBA"))
+    meta = extract_metadata(out)
+    assert (meta["width"], meta["height"]) == (30, 30)
+    assert meta["has_alpha"] is True
+
+
+def test_embroidery_preserves_opaque_mode():
+    out = embroidery(_png(30, 30, "RGB"))
+    meta = extract_metadata(out)
+    assert meta["has_alpha"] is False

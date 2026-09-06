@@ -9,11 +9,15 @@ from typing import Any
 
 import rembg
 import vtracer
-from PIL import Image, ImageEnhance, ImageOps
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageOps, ImageStat
 
 # Upscale is capped to avoid a single job exhausting worker memory/CPU.
 MAX_UPSCALE_FACTOR = 4.0
 MAX_UPSCALE_DIMENSION = 8000
+
+# Halftone dot-cell size (px), clamped to keep it a deliberate stylistic choice.
+MIN_HALFTONE_CELL = 2
+MAX_HALFTONE_CELL = 40
 
 # DTF print-readiness thresholds.
 DTF_RECOMMENDED_DPI = 300
@@ -271,4 +275,72 @@ def export_pdf(data: bytes, parameters: dict[str, Any] | None = None) -> bytes:
 
         out = BytesIO()
         background.save(out, format="PDF", resolution=dpi)
+        return out.getvalue()
+
+
+def halftone(data: bytes, parameters: dict[str, Any] | None = None) -> bytes:
+    """Apply a classic dot-screen halftone effect (black dots on white).
+
+    Grayscale only — screen-printing-style halftones are single-color layers,
+    so any transparency is flattened away. Optional `parameters.cell_size`
+    (px per dot cell, default 8, clamped to
+    [`MIN_HALFTONE_CELL`, `MAX_HALFTONE_CELL`]) sets dot density: smaller
+    cells mean finer, more detailed dots.
+    """
+    parameters = parameters or {}
+    cell_size = int(_clamp(float(parameters.get("cell_size", 8)), MIN_HALFTONE_CELL, MAX_HALFTONE_CELL))
+
+    with Image.open(BytesIO(data)) as img:
+        img.load()
+        gray = img.convert("L")
+        width, height = gray.size
+
+        canvas = Image.new("L", (width, height), 255)
+        draw = ImageDraw.Draw(canvas)
+
+        for y in range(0, height, cell_size):
+            for x in range(0, width, cell_size):
+                cell = gray.crop((x, y, min(x + cell_size, width), min(y + cell_size, height)))
+                brightness = ImageStat.Stat(cell).mean[0] / 255.0
+                radius = (1.0 - brightness) * (cell_size / 2.0)
+                if radius > 0.5:
+                    cx, cy = x + cell_size / 2, y + cell_size / 2
+                    draw.ellipse([cx - radius, cy - radius, cx + radius, cy + radius], fill=0)
+
+        out = BytesIO()
+        canvas.convert("RGB").save(out, format="PNG")
+        return out.getvalue()
+
+
+def embroidery(data: bytes, parameters: dict[str, Any] | None = None) -> bytes:
+    """Apply a stylized embroidery-look visual effect.
+
+    Preview only — this does not generate real machine stitch/digitizing
+    data. Posterizes the color palette (simulating a limited thread-color
+    count) and blends in a subtle emboss texture to suggest raised stitching.
+    Transparency is preserved. Optional `parameters.color_levels` (bits kept
+    per channel, default 4, clamped to [2, 8]) controls how aggressively
+    colors are posterized — lower means fewer, flatter "thread" colors.
+    """
+    parameters = parameters or {}
+    color_levels = int(_clamp(float(parameters.get("color_levels", 4)), 2, 8))
+
+    with Image.open(BytesIO(data)) as img:
+        img.load()
+        has_alpha = img.mode in ("RGBA", "LA", "PA") or "transparency" in img.info
+        rgba = img.convert("RGBA")
+        rgb = rgba.convert("RGB")
+        alpha = rgba.getchannel("A")
+
+        posterized = ImageOps.posterize(rgb, color_levels)
+        emboss = rgb.filter(ImageFilter.EMBOSS).convert("RGB")
+        stitched = Image.blend(posterized, emboss, alpha=0.25)
+
+        out = BytesIO()
+        if has_alpha:
+            result = stitched.convert("RGBA")
+            result.putalpha(alpha)
+            result.save(out, format="PNG")
+        else:
+            stitched.save(out, format="PNG")
         return out.getvalue()

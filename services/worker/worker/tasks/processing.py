@@ -20,7 +20,16 @@ from worker.celery_app import celery_app
 from worker.config import get_settings
 from worker.services import imaging, storage
 
-SUPPORTED_OPERATIONS = {"metadata", "enhance", "upscale", "background_removal", "dtf_check"}
+SUPPORTED_OPERATIONS = {
+    "metadata",
+    "enhance",
+    "upscale",
+    "background_removal",
+    "halftone",
+    "embroidery",
+    "vectorize",
+    "dtf_check",
+}
 
 # Operations that analyze the image and return a result dict, no image output.
 _ANALYSES = {
@@ -33,6 +42,20 @@ _TRANSFORMS = {
     "enhance": imaging.enhance,
     "upscale": imaging.upscale,
     "background_removal": imaging.remove_background,
+    "halftone": imaging.halftone,
+    "embroidery": imaging.embroidery,
+    "vectorize": imaging.vectorize,
+}
+
+# Each transform's output format — most produce a raster PNG, but vectorize
+# produces vector SVG markup, which has no fixed pixel dimensions.
+_TRANSFORM_OUTPUT: dict[str, tuple[str, str]] = {
+    "enhance": ("png", "image/png"),
+    "upscale": ("png", "image/png"),
+    "background_removal": ("png", "image/png"),
+    "halftone": ("png", "image/png"),
+    "embroidery": ("png", "image/png"),
+    "vectorize": ("svg", "image/svg+xml"),
 }
 
 
@@ -57,12 +80,18 @@ def run(
         return _ANALYSES[operation](data, parameters or {})
 
     output = _TRANSFORMS[operation](data, parameters or {})
-    result = imaging.extract_metadata(output)
+    ext, mime_type = _TRANSFORM_OUTPUT[operation]
 
     settings = get_settings()
     out_bucket = settings.s3_bucket_derived
-    out_key = f"projects/{project_id}/derived/{job_id}/{operation}.png"
-    storage.upload_bytes(out_bucket, out_key, output, "image/png")
+    out_key = f"projects/{project_id}/derived/{job_id}/{operation}.{ext}"
+    storage.upload_bytes(out_bucket, out_key, output, mime_type)
 
-    result.update(bucket=out_bucket, key=out_key, mime_type="image/png", size_bytes=len(output))
+    if ext == "png":
+        result = imaging.extract_metadata(output)
+    else:
+        # Vector output (e.g. vectorize's SVG) — no fixed pixel size to report.
+        result = {"width": None, "height": None}
+
+    result.update(bucket=out_bucket, key=out_key, mime_type=mime_type, size_bytes=len(output))
     return result

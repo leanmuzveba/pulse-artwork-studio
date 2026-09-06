@@ -27,12 +27,15 @@ from app.services import queue
 
 router = APIRouter()
 
-# Operations available so far (more processors land in later phases).
+# All processing operations are now implemented (Phase 3 complete).
 SUPPORTED_OPERATIONS = {
     JobOperation.METADATA,
     JobOperation.ENHANCE,
     JobOperation.UPSCALE,
     JobOperation.BACKGROUND_REMOVAL,
+    JobOperation.HALFTONE,
+    JobOperation.EMBROIDERY,
+    JobOperation.VECTORIZE,
     JobOperation.DTF_CHECK,
 }
 
@@ -41,6 +44,9 @@ _DERIVING_OPERATIONS = {
     JobOperation.ENHANCE,
     JobOperation.UPSCALE,
     JobOperation.BACKGROUND_REMOVAL,
+    JobOperation.HALFTONE,
+    JobOperation.EMBROIDERY,
+    JobOperation.VECTORIZE,
 }
 _TERMINAL = {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}
 
