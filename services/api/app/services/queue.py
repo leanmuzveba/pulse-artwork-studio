@@ -24,6 +24,7 @@ _celery = Celery(
 )
 
 TASK_RUN = "processing.run"
+TASK_EXPORT = "exports.run"
 
 
 def enqueue_job(
@@ -40,6 +41,29 @@ def enqueue_job(
         kwargs={
             "job_id": str(job_id),
             "operation": operation,
+            "bucket": bucket,
+            "key": key,
+            "parameters": parameters,
+            "project_id": str(project_id),
+        },
+    )
+    return result.id
+
+
+def enqueue_export(
+    export_id: uuid.UUID,
+    export_format: str,
+    bucket: str,
+    key: str,
+    parameters: dict[str, Any],
+    project_id: uuid.UUID,
+) -> str:
+    """Publish an export task and return its Celery task id."""
+    result = _celery.send_task(
+        TASK_EXPORT,
+        kwargs={
+            "export_id": str(export_id),
+            "format": export_format,
             "bucket": bucket,
             "key": key,
             "parameters": parameters,

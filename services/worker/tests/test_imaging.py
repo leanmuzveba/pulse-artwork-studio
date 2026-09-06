@@ -10,6 +10,8 @@ from worker.services import imaging
 from worker.services.imaging import (
     dtf_check,
     enhance,
+    export_pdf,
+    export_png,
     extract_metadata,
     remove_background,
     upscale,
@@ -179,3 +181,27 @@ def test_vectorize_uses_default_parameters(monkeypatch):
     vectorize(_png(10, 10, "RGBA"))
 
     assert calls == [{"mode": "spline", "color_precision": 6, "filter_speckle": 4}]
+
+
+def test_export_png_embeds_default_dpi_without_resizing():
+    out = export_png(_png(10, 20, "RGBA"))
+    meta = extract_metadata(out)
+    assert (meta["width"], meta["height"]) == (10, 20)
+    assert meta["source_dpi"] == 300
+
+
+def test_export_png_resizes_by_width_preserving_aspect():
+    out = export_png(_png(10, 20, "RGB"), {"width": 20})
+    meta = extract_metadata(out)
+    assert (meta["width"], meta["height"]) == (20, 40)
+
+
+def test_export_png_resizes_by_explicit_width_and_height():
+    out = export_png(_png(10, 20, "RGB"), {"width": 5, "height": 5})
+    meta = extract_metadata(out)
+    assert (meta["width"], meta["height"]) == (5, 5)
+
+
+def test_export_pdf_flattens_transparency_onto_white():
+    out = export_pdf(_png(10, 10, "RGBA"))
+    assert out.startswith(b"%PDF")

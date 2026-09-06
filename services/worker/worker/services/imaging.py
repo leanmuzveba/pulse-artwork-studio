@@ -224,3 +224,51 @@ def vectorize(data: bytes, parameters: dict[str, Any] | None = None) -> bytes:
         filter_speckle=filter_speckle,
     )
     return svg.encode("utf-8")
+
+
+def export_png(data: bytes, parameters: dict[str, Any] | None = None) -> bytes:
+    """Re-encode an image as PNG for export, optionally resizing and embedding DPI.
+
+    Optional `parameters`: `width`/`height` (px; resize with the other
+    dimension scaled to preserve aspect ratio if only one is given), `dpi`
+    (embedded resolution metadata, default 300).
+    """
+    parameters = parameters or {}
+    dpi = int(parameters.get("dpi", 300))
+    target_w = parameters.get("width")
+    target_h = parameters.get("height")
+
+    with Image.open(BytesIO(data)) as img:
+        img.load()
+        if target_w or target_h:
+            orig_w, orig_h = img.width, img.height
+            if target_w and not target_h:
+                target_h = round(orig_h * (float(target_w) / orig_w))
+            elif target_h and not target_w:
+                target_w = round(orig_w * (float(target_h) / orig_h))
+            img = img.resize((max(int(target_w), 1), max(int(target_h), 1)), Image.LANCZOS)
+
+        out = BytesIO()
+        img.save(out, format="PNG", dpi=(dpi, dpi))
+        return out.getvalue()
+
+
+def export_pdf(data: bytes, parameters: dict[str, Any] | None = None) -> bytes:
+    """Convert an image to a single-page PDF for export.
+
+    Transparency is flattened onto a white background, since PDF has no alpha
+    channel. Optional `parameters.dpi` (default 300) sets the embedded
+    resolution.
+    """
+    parameters = parameters or {}
+    dpi = int(parameters.get("dpi", 300))
+
+    with Image.open(BytesIO(data)) as img:
+        img.load()
+        rgba = img.convert("RGBA")
+        background = Image.new("RGB", rgba.size, (255, 255, 255))
+        background.paste(rgba, mask=rgba.getchannel("A"))
+
+        out = BytesIO()
+        background.save(out, format="PDF", resolution=dpi)
+        return out.getvalue()

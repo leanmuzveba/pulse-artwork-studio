@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Enum as SAEnum, ForeignKey, Integer, String
+from sqlalchemy import Enum as SAEnum, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -44,6 +44,10 @@ class Export(UUIDMixin, TimestampMixin, Base):
 
     storage_bucket: Mapped[str | None] = mapped_column(String(120))
     storage_key: Mapped[str | None] = mapped_column(String(512))
+
+    # Celery task id, used to reconcile worker state into this row on poll.
+    task_id: Mapped[str | None] = mapped_column(String(155))
+    error_message: Mapped[str | None] = mapped_column(Text)
 
     project: Mapped[Project] = relationship()
     artwork: Mapped[Artwork] = relationship()
