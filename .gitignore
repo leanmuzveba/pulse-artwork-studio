@@ -51,7 +51,10 @@ apps/web/pubspec.lock
 !.vscode/settings.shared.json
 
 # ---- Object storage / uploads (never commit binary assets) ----
-storage/
-uploads/
+# Anchored to the repo root: an unanchored `storage/` also matches source
+# directories that happen to share the name (e.g. apps/web/lib/core/storage/,
+# which silently swallowed a real Dart file before this fix).
+/storage/
+/uploads/
 *.psd
 *.tiff
