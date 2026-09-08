@@ -37,7 +37,7 @@ def extract_metadata(data: bytes) -> dict[str, Any]:
     """
     with Image.open(BytesIO(data)) as img:
         dpi = img.info.get("dpi")
-        source_dpi = int(round(dpi[0])) if dpi else None
+        source_dpi = round(dpi[0]) if dpi else None
         has_alpha = img.mode in ("RGBA", "LA", "PA") or "transparency" in img.info
         return {
             "width": img.width,

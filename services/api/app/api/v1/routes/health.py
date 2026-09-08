@@ -38,7 +38,7 @@ async def ready() -> JSONResponse:
 
     try:
         db_ok = await asyncio.wait_for(check_database(), timeout=3.0)
-    except (TimeoutError, asyncio.TimeoutError):
+    except TimeoutError:
         db_ok = False
 
     checks = {"database": "ok" if db_ok else "unavailable"}

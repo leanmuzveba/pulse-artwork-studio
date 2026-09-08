@@ -14,9 +14,9 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+import app.db.models  # noqa: F401  (import side effect: register all tables)
 from app.core.config import get_settings
 from app.db.base import Base
-import app.db.models  # noqa: F401  (import side effect: register all tables)
 
 config = context.config
 

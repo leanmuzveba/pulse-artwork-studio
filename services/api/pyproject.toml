@@ -46,6 +46,15 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "C4"]
+# B008: FastAPI's `Depends(...)` as a parameter default is the framework's
+# documented idiom, not a real mutable-default bug — ruff's own docs list
+# this exact ignore for FastAPI projects.
+# UP042: app/db/enums.py deliberately mixes `str` for storage/serialization
+# compatibility (see its module docstring); `StrEnum`'s `str()` semantics
+# differ, so swapping bases is a behavior change, not a style fix.
+# UP046: `Generic[T]` (not PEP 695 type params) is used for broad tooling
+# compatibility with the rest of the Pydantic v2 codebase.
+ignore = ["B008", "UP042", "UP046"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

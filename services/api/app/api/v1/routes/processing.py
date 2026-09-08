@@ -9,7 +9,7 @@ reconciles that state into the processing_jobs row whenever the client polls.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, status
@@ -137,7 +137,7 @@ async def _reconcile(job: ProcessingJob, session: AsyncSession) -> None:
     except Exception:
         return  # broker unreachable — leave the row unchanged
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     changed = False
 
     if state == "STARTED" and job.status != JobStatus.PROCESSING:

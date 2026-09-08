@@ -6,7 +6,7 @@ Kept dependency-light and side-effect-free so it is unit-testable without a DB.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import bcrypt
 import jwt
@@ -38,7 +38,7 @@ def verify_password(password: str, hashed: str) -> bool:
 
 
 def _create_token(subject: str | uuid.UUID, token_type: str, expires_delta: timedelta) -> str:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     payload = {
         "sub": str(subject),
         "type": token_type,
