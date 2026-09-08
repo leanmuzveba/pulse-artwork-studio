@@ -1,21 +1,30 @@
 import "package:flutter/material.dart";
 
 /// Brand palette — yellow / grey / black.
-/// (Reference: intial_docs/"Color Palette _ Yellow _ Grey _ Black".)
+/// Sourced from the "pulsedashboard" HTML prototype (2026-09-06) and
+/// `intial_docs/Color Palette _ Yellow _ Grey _ Black.jfif`.
 abstract final class AppColors {
-  // Core brand
-  static const Color pulseYellow = Color(0xFFE8A80C); // primary accent (on light)
-  static const Color pulseYellowBright = Color(0xFFF5C518); // accent on dark
-  static const Color ink = Color(0xFF1A1815); // near-black, warm
-  static const Color onAccent = Color(0xFF1A1815);
+  // Core brand accent
+  static const Color pulseYellow = Color(0xFFFFEE32);
+  static const Color pulseGold = Color(0xFFFFD100);
+  static const Color onAccent = Color(0xFF202020);
 
-  // Warm grey scale (biased slightly toward the yellow)
-  static const Color grey900 = Color(0xFF201E1A);
-  static const Color grey700 = Color(0xFF57544C);
-  static const Color grey500 = Color(0xFF8A867B);
-  static const Color grey300 = Color(0xFFD3CFC1);
-  static const Color grey100 = Color(0xFFF1EFE8);
-  static const Color paper = Color(0xFFF7F6F1);
-  static const Color surfaceDark = Color(0xFF1E1C17);
-  static const Color bgDark = Color(0xFF141310);
+  // Charcoal surfaces (the app is dark-first, matching the design)
+  static const Color charcoalLight = Color(0xFF333533);
+  static const Color charcoalDark = Color(0xFF202020);
+  static const Color canvasDark = Color(0xFF151515);
+  static const Color surfaceRaised = Color(0xFF2A2A2A);
+  static const Color black = Color(0xFF000000);
+
+  // Text / greys
+  static const Color textPrimary = Color(0xFFFFFFFF);
+  static const Color textSecondary = Color(0xFFD6D6D6);
+  static const Color textMuted = Color(0xFF8A8A8A);
+  static const Color divider = Color(0x0DFFFFFF); // white @ 5%
+
+  // Status
+  static const Color success = Color(0xFF10B981); // emerald-500
+  static const Color warning = Color(0xFFFB923C); // orange-400
+  static const Color critical = Color(0xFFEF4444); // red-500
+  static const Color info = Color(0xFF60A5FA); // blue-400
 }

@@ -15,9 +15,7 @@ class PulseApp extends ConsumerWidget {
     return MaterialApp.router(
       title: "Pulse Artwork Studio",
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.light,
-      darkTheme: AppTheme.dark,
-      themeMode: ThemeMode.system,
+      theme: AppTheme.dark,
       routerConfig: router,
     );
   }
