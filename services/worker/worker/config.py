@@ -26,10 +26,12 @@ class Settings(BaseSettings):
     s3_bucket_derived: str = "pulse-derived"
     s3_bucket_exports: str = "pulse-exports"
 
-    # AI provider selection (worker/services/ai_providers.py). Any future
-    # remote provider's API key belongs here too — server-side only, never
-    # shipped to the Flutter client.
+    # AI provider selection (worker/services/ai_providers.py) — per-operation,
+    # since different operations may need different providers. A future
+    # remote/API-backed provider's key is read server-side only, from
+    # ai_provider_api_key — it never reaches the Flutter client.
     ai_background_removal_provider: str = "rembg_local"
+    ai_provider_api_key: str | None = None
 
 
 @lru_cache
