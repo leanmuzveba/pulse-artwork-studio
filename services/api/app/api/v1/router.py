@@ -14,6 +14,7 @@ from app.api.v1.routes import (
     artworks,
     auth,
     exports,
+    gang_sheets,
     health,
     processing,
     projects,
@@ -29,4 +30,7 @@ api_v1_router.include_router(projects.router, prefix="/projects", tags=["project
 api_v1_router.include_router(artworks.router, prefix="/projects", tags=["artworks"])
 api_v1_router.include_router(processing.router, prefix="/processing", tags=["processing"])
 api_v1_router.include_router(exports.router, prefix="/exports", tags=["exports"])
+api_v1_router.include_router(
+    gang_sheets.router, prefix="/gang-sheets", tags=["gang-sheets"]
+)
 api_v1_router.include_router(subscriptions.router, prefix="/subscriptions", tags=["subscriptions"])

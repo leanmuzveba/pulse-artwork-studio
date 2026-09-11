@@ -69,6 +69,12 @@ class ExportStatus(str, Enum):
     FAILED = "failed"
 
 
+class GangSheetStatus(str, Enum):
+    PENDING = "pending"
+    READY = "ready"
+    FAILED = "failed"
+
+
 class PlanTier(str, Enum):
     FREE = "free"
     PROFESSIONAL = "professional"

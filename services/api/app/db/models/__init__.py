@@ -4,6 +4,7 @@ from app.db.models.artwork import Artwork
 from app.db.models.audit_log import AuditLog
 from app.db.models.entitlement import Entitlement
 from app.db.models.export import Export
+from app.db.models.gang_sheet import GangSheet
 from app.db.models.processing_job import ProcessingJob
 from app.db.models.project import Project
 from app.db.models.user import User
@@ -14,6 +15,7 @@ __all__ = [
     "Artwork",
     "ProcessingJob",
     "Export",
+    "GangSheet",
     "Entitlement",
     "AuditLog",
 ]

@@ -99,6 +99,13 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
                   ),
                 ),
               ),
+              OutlinedButton.icon(
+                onPressed: () => context.goNamed("gang-sheet",
+                    pathParameters: {"projectId": widget.projectId}),
+                icon: const Icon(Icons.grid_view_rounded, size: 16),
+                label: const Text("Gang Sheet"),
+              ),
+              const SizedBox(width: 12),
               FilledButton.icon(
                 onPressed: _uploading ? null : _uploadMore,
                 icon: _uploading

@@ -25,6 +25,7 @@ _celery = Celery(
 
 TASK_RUN = "processing.run"
 TASK_EXPORT = "exports.run"
+TASK_GANG_SHEET = "gang_sheets.run"
 
 
 def enqueue_job(
@@ -68,6 +69,29 @@ def enqueue_export(
             "key": key,
             "parameters": parameters,
             "project_id": str(project_id),
+        },
+    )
+    return result.id
+
+
+def enqueue_gang_sheet(
+    gang_sheet_id: uuid.UUID,
+    project_id: uuid.UUID,
+    sheet_width_px: int,
+    spacing_px: int,
+    dpi: int,
+    items: list[dict[str, Any]],
+) -> str:
+    """Publish a gang-sheet composition task and return its Celery task id."""
+    result = _celery.send_task(
+        TASK_GANG_SHEET,
+        kwargs={
+            "gang_sheet_id": str(gang_sheet_id),
+            "project_id": str(project_id),
+            "sheet_width_px": sheet_width_px,
+            "spacing_px": spacing_px,
+            "dpi": dpi,
+            "items": items,
         },
     )
     return result.id

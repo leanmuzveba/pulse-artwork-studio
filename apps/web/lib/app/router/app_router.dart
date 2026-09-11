@@ -8,6 +8,7 @@ import "../../features/dashboard/presentation/dashboard_screen.dart";
 import "../../features/dtf_prep/presentation/dtf_prep_screen.dart";
 import "../../features/editor/presentation/editor_screen.dart";
 import "../../features/exports/presentation/export_screen.dart";
+import "../../features/gang_sheet/presentation/gang_sheet_screen.dart";
 import "../../features/inspector/presentation/inspector_screen.dart";
 import "../../features/projects/presentation/new_project_screen.dart";
 import "../../features/projects/presentation/project_detail_screen.dart";
@@ -99,6 +100,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => ExportScreen(
               projectId: state.pathParameters["projectId"]!,
               artworkId: state.pathParameters["artworkId"]!,
+            ),
+          ),
+          GoRoute(
+            path: "/gang-sheet/:projectId",
+            name: "gang-sheet",
+            builder: (context, state) => GangSheetScreen(
+              projectId: state.pathParameters["projectId"]!,
             ),
           ),
         ],
