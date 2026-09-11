@@ -10,7 +10,8 @@ enum JobOperation {
   crop,
   rotate,
   flip,
-  resize;
+  resize,
+  underbasePreview("underbase_preview");
 
   const JobOperation([String? wireValue]) : _wireValue = wireValue;
 

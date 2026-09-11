@@ -54,6 +54,7 @@ class JobOperation(str, Enum):
     ROTATE = "rotate"
     FLIP = "flip"
     RESIZE = "resize"
+    UNDERBASE_PREVIEW = "underbase_preview"
 
 
 class ExportFormat(str, Enum):

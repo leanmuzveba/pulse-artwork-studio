@@ -297,6 +297,7 @@ def test_vectorize_job_success_creates_svg_derived_artwork(monkeypatch):
         "rotate",
         "flip",
         "resize",
+        "underbase_preview",
     ],
 )
 def test_supported_operations_are_accepted(monkeypatch, operation):

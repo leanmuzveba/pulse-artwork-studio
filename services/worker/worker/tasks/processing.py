@@ -33,6 +33,7 @@ SUPPORTED_OPERATIONS = {
     "rotate",
     "flip",
     "resize",
+    "underbase_preview",
 }
 
 # Operations that analyze the image and return a result dict, no image output.
@@ -53,6 +54,7 @@ _TRANSFORMS = {
     "rotate": imaging.rotate,
     "flip": imaging.flip,
     "resize": imaging.resize,
+    "underbase_preview": imaging.underbase_preview,
 }
 
 # Each transform's output format — most produce a raster PNG, but vectorize
@@ -68,6 +70,7 @@ _TRANSFORM_OUTPUT: dict[str, tuple[str, str]] = {
     "rotate": ("png", "image/png"),
     "flip": ("png", "image/png"),
     "resize": ("png", "image/png"),
+    "underbase_preview": ("png", "image/png"),
 }
 
 

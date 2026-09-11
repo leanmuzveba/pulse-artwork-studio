@@ -13,6 +13,8 @@ import "../../processing/application/processing_run_controller.dart";
 /// local preview-only controls — the backend doesn't yet have a place to
 /// persist per-sheet layout, so nothing here is saved. The print-check list
 /// is real: it's driven by the same `dtf_check` analysis as the AI Inspector.
+/// The layer-preview toggle is real too, backed by the `underbase_preview`
+/// processing operation — not a RIP replacement, a visual simulation.
 class DtfPrepScreen extends ConsumerStatefulWidget {
   const DtfPrepScreen(
       {required this.projectId, required this.artworkId, super.key});
@@ -25,6 +27,8 @@ class DtfPrepScreen extends ConsumerStatefulWidget {
 
 class _DtfPrepScreenState extends ConsumerState<DtfPrepScreen> {
   static const _tag = "dtf-scan";
+  static const _underbaseTag = "dtf-underbase-preview";
+  static const _underbaseModes = ["full_color", "cmyk", "white", "cmyk_white"];
   double _choke = 0.3;
   double _minDotWidth = 0.5;
   int _viewMode = 0;
@@ -43,7 +47,16 @@ class _DtfPrepScreenState extends ConsumerState<DtfPrepScreen> {
           projectId: widget.projectId,
           artworkId: widget.artworkId,
           operation: JobOperation.dtfCheck);
+      _runUnderbasePreview();
     });
+  }
+
+  Future<void> _runUnderbasePreview() {
+    return ref.read(processingRunControllerProvider(_underbaseTag).notifier).run(
+        projectId: widget.projectId,
+        artworkId: widget.artworkId,
+        operation: JobOperation.underbasePreview,
+        parameters: {"mode": _underbaseModes[_viewMode]});
   }
 
   @override
@@ -55,6 +68,15 @@ class _DtfPrepScreenState extends ConsumerState<DtfPrepScreen> {
     final scanState = ref.watch(processingRunControllerProvider(_tag));
     final report = scanState.valueOrNull?.resultData != null
         ? DtfCheckReport.fromJson(scanState.valueOrNull!.resultData!)
+        : null;
+
+    final underbaseState = ref.watch(processingRunControllerProvider(_underbaseTag));
+    final previewArtworkId = underbaseState.valueOrNull?.status == JobStatus.completed
+        ? underbaseState.valueOrNull?.resultArtworkId
+        : null;
+    final previewArtworkAsync = previewArtworkId != null
+        ? ref.watch(artworkDetailProvider(
+            (projectId: widget.projectId, artworkId: previewArtworkId)))
         : null;
 
     return Column(
@@ -167,27 +189,31 @@ class _DtfPrepScreenState extends ConsumerState<DtfPrepScreen> {
                         child: artworkAsync.when(
                           loading: () => const LoadingPanel(),
                           error: (error, _) => ErrorPanel(message: "$error"),
-                          data: (artwork) => Container(
-                            width: 280,
-                            height: 280,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF1A1A1A),
-                              border: Border.all(color: AppColors.info),
-                            ),
-                            child: artwork.downloadUrl != null && !artwork.isSvg
-                                ? ColorFiltered(
-                                    colorFilter: _viewMode == 1
-                                        ? const ColorFilter.mode(
-                                            Colors.white, BlendMode.saturation)
-                                        : const ColorFilter.mode(
-                                            Colors.transparent,
-                                            BlendMode.multiply),
-                                    child: Image.network(artwork.downloadUrl!,
-                                        fit: BoxFit.contain),
-                                  )
-                                : const Icon(Icons.image,
-                                    color: AppColors.textMuted),
-                          ),
+                          data: (artwork) {
+                            final previewUrl =
+                                previewArtworkAsync?.valueOrNull?.downloadUrl;
+                            final showSpinner = underbaseState.isLoading ||
+                                (previewArtworkAsync?.isLoading ?? false);
+                            return Container(
+                              width: 280,
+                              height: 280,
+                              decoration: BoxDecoration(
+                                color: _viewMode >= 2
+                                    ? const Color(0xFF3C3C40) // garment swatch
+                                    : const Color(0xFF1A1A1A),
+                                border: Border.all(color: AppColors.info),
+                              ),
+                              child: showSpinner
+                                  ? const LoadingPanel(message: "Rendering preview...")
+                                  : (previewUrl != null
+                                      ? Image.network(previewUrl, fit: BoxFit.contain)
+                                      : (artwork.downloadUrl != null && !artwork.isSvg
+                                          ? Image.network(artwork.downloadUrl!,
+                                              fit: BoxFit.contain)
+                                          : const Icon(Icons.image,
+                                              color: AppColors.textMuted))),
+                            );
+                          },
                         ),
                       ),
                       Positioned(
@@ -206,15 +232,18 @@ class _DtfPrepScreenState extends ConsumerState<DtfPrepScreen> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 for (final (index, label) in const [
-                                  "Standard CMYK",
+                                  "Full Color",
+                                  "CMYK",
                                   "White Underbase",
                                   "Combined",
                                 ].indexed)
                                   _ViewModeButton(
                                     label: label,
                                     selected: _viewMode == index,
-                                    onTap: () =>
-                                        setState(() => _viewMode = index),
+                                    onTap: () {
+                                      setState(() => _viewMode = index);
+                                      _runUnderbasePreview();
+                                    },
                                   ),
                               ],
                             ),

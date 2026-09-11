@@ -220,6 +220,27 @@ def test_resize_op_uploads_result_and_returns_location(monkeypatch):
     assert result["width"] == 40 and result["height"] == 40
 
 
+def test_underbase_preview_op_uploads_result_and_returns_location(monkeypatch):
+    monkeypatch.setattr(processing.run, "update_state", lambda *a, **k: None)
+    monkeypatch.setattr(storage, "download_bytes", lambda bucket, key: _png(10, 10))
+    uploaded = {}
+    monkeypatch.setattr(
+        storage, "upload_bytes", lambda b, k, d, c: uploaded.update(bucket=b, key=k)
+    )
+
+    result = processing.run.run(
+        "job-13",
+        "underbase_preview",
+        "pulse-originals",
+        "src.png",
+        {"mode": "white"},
+        "proj-4",
+    )
+
+    assert uploaded["key"] == "projects/proj-4/derived/job-13/underbase_preview.png"
+    assert result["width"] == 10 and result["height"] == 10
+
+
 def test_unsupported_operation_raises():
     with pytest.raises(ValueError):
         processing.run.run("job-3", "not-a-real-op", "b", "k")

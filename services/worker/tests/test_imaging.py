@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 
+import pytest
 from PIL import Image, ImageDraw
 
 from worker.services import imaging
@@ -20,6 +21,7 @@ from worker.services.imaging import (
     remove_background,
     resize,
     rotate,
+    underbase_preview,
     upscale,
     vectorize,
 )
@@ -365,3 +367,58 @@ def test_resize_without_dimensions_is_a_no_op():
     out = resize(_png(10, 20, "RGBA"))
     meta = extract_metadata(out)
     assert (meta["width"], meta["height"]) == (10, 20)
+
+
+def _centered_square(width: int, height: int) -> bytes:
+    # A colored square in the middle, transparent margin all around — leaves
+    # a corner pixel to check background/garment handling per mode.
+    return _rgba_with_shape(
+        width,
+        height,
+        lambda d: d.rectangle(
+            [width // 4, height // 4, 3 * width // 4, 3 * height // 4],
+            fill=(200, 30, 30, 255),
+        ),
+    )
+
+
+def test_underbase_preview_full_color_is_opaque_on_white():
+    out = underbase_preview(_centered_square(40, 40), {"mode": "full_color"})
+    img = Image.open(io.BytesIO(out)).convert("RGBA")
+    assert img.getpixel((0, 0)) == (255, 255, 255, 255)  # was transparent, now white
+    meta = extract_metadata(out)
+    assert (meta["width"], meta["height"]) == (40, 40)
+
+
+def test_underbase_preview_defaults_to_full_color():
+    out = underbase_preview(_centered_square(40, 40))
+    img = Image.open(io.BytesIO(out)).convert("RGBA")
+    assert img.getpixel((0, 0)) == (255, 255, 255, 255)
+
+
+def test_underbase_preview_white_mode_is_a_silhouette_on_transparency():
+    out = underbase_preview(_centered_square(40, 40), {"mode": "white"})
+    img = Image.open(io.BytesIO(out)).convert("RGBA")
+    assert img.getpixel((0, 0)) == (0, 0, 0, 0)  # margin stays transparent
+    assert img.getpixel((20, 20)) == (255, 255, 255, 255)  # shape -> solid white
+
+
+def test_underbase_preview_cmyk_mode_preserves_dimensions_and_alpha():
+    out = underbase_preview(_centered_square(40, 40), {"mode": "cmyk"})
+    meta = extract_metadata(out)
+    assert (meta["width"], meta["height"]) == (40, 40)
+    img = Image.open(io.BytesIO(out)).convert("RGBA")
+    assert img.getpixel((0, 0))[3] == 0  # margin transparency preserved
+
+
+def test_underbase_preview_cmyk_white_composites_on_the_garment_swatch():
+    out = underbase_preview(_centered_square(40, 40), {"mode": "cmyk_white"})
+    img = Image.open(io.BytesIO(out)).convert("RGBA")
+    assert img.getpixel((0, 0)) == (*imaging._UNDERBASE_GARMENT_COLOR, 255)
+    # The shape area should be fully opaque (color layer over the white layer).
+    assert img.getpixel((20, 20))[3] == 255
+
+
+def test_underbase_preview_unknown_mode_raises():
+    with pytest.raises(ValueError, match="Unknown underbase preview mode"):
+        underbase_preview(_centered_square(10, 10), {"mode": "not-a-real-mode"})

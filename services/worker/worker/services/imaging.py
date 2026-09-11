@@ -499,6 +499,81 @@ def export_pdf(data: bytes, parameters: dict[str, Any] | None = None) -> bytes:
         return out.getvalue()
 
 
+
+# Neutral dark backdrop standing in for a garment, so a "printed on dark
+# fabric" preview has something to show the white underbase layer against.
+_UNDERBASE_GARMENT_COLOR = (60, 60, 64)
+
+
+def _composite_on_white(rgba: Image.Image) -> Image.Image:
+    background = Image.new("RGBA", rgba.size, (255, 255, 255, 255))
+    background.alpha_composite(rgba)
+    return background
+
+
+def _posterized_cmyk(rgb: Image.Image, step: int = 32) -> Image.Image:
+    """Quantize each CMYK ink channel to coarse steps. 4-color process
+    printing can't render a full continuous-tone gradient the way an RGB
+    screen can, so this gives a rough "printed ink" look, not a color-managed
+    conversion."""
+    cmyk = rgb.convert("CMYK")
+    bands = [b.point(lambda v: min(255, round(v / step) * step)) for b in cmyk.split()]
+    return Image.merge("CMYK", bands).convert("RGB")
+
+
+def _simulate_cmyk(rgba: Image.Image) -> Image.Image:
+    """The artwork with a CMYK-process ink look, its original alpha intact."""
+    posterized = _posterized_cmyk(_composite_on_white(rgba).convert("RGB"))
+    result = posterized.convert("RGBA")
+    result.putalpha(rgba.getchannel("A"))
+    return result
+
+
+def _white_underbase_layer(alpha: Image.Image) -> Image.Image:
+    """The alpha channel rendered as a solid white silhouette — what a DTF
+    printer's white-ink layer looks like underneath the color layer."""
+    mask = alpha.point(lambda a: 255 if a > 16 else 0)
+    white = Image.new("RGBA", alpha.size, (255, 255, 255, 255))
+    empty = Image.new("RGBA", alpha.size, (0, 0, 0, 0))
+    return Image.composite(white, empty, mask)
+
+
+def underbase_preview(data: bytes, parameters: dict[str, Any] | None = None) -> bytes:
+    """Render a DTF print-layer preview.
+
+    A visual simulation only — not a RIP replacement or a color-accurate
+    proof. Optional `parameters.mode`: "full_color" (default, on a white
+    background), "cmyk" (posterized ink-channel approximation), "white" (the
+    white-ink underbase layer alone, as a silhouette on transparency), or
+    "cmyk_white" (both layers composited over a dark garment swatch,
+    simulating a print on dark fabric).
+    """
+    parameters = parameters or {}
+    mode = parameters.get("mode", "full_color")
+    if mode not in ("full_color", "cmyk", "white", "cmyk_white"):
+        raise ValueError(f"Unknown underbase preview mode: {mode!r}")
+
+    with Image.open(BytesIO(data)) as img:
+        img.load()
+        rgba = img.convert("RGBA")
+
+        if mode == "full_color":
+            result = _composite_on_white(rgba)
+        elif mode == "cmyk":
+            result = _simulate_cmyk(rgba)
+        elif mode == "white":
+            result = _white_underbase_layer(rgba.getchannel("A"))
+        else:  # cmyk_white
+            garment = Image.new("RGBA", rgba.size, (*_UNDERBASE_GARMENT_COLOR, 255))
+            garment.alpha_composite(_white_underbase_layer(rgba.getchannel("A")))
+            garment.alpha_composite(_simulate_cmyk(rgba))
+            result = garment
+
+        out = BytesIO()
+        result.save(out, format="PNG")
+        return out.getvalue()
+
+
 def halftone(data: bytes, parameters: dict[str, Any] | None = None) -> bytes:
     """Apply a classic dot-screen halftone effect (black dots on white).
 

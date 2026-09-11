@@ -42,6 +42,7 @@ SUPPORTED_OPERATIONS = {
     JobOperation.ROTATE,
     JobOperation.FLIP,
     JobOperation.RESIZE,
+    JobOperation.UNDERBASE_PREVIEW,
 }
 
 # Operations that produce a new derived Artwork rather than annotating the original.
@@ -56,6 +57,7 @@ _DERIVING_OPERATIONS = {
     JobOperation.ROTATE,
     JobOperation.FLIP,
     JobOperation.RESIZE,
+    JobOperation.UNDERBASE_PREVIEW,
 }
 _TERMINAL = {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}
 
