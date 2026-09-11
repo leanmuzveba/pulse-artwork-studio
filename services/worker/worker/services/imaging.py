@@ -24,9 +24,84 @@ DTF_RECOMMENDED_DPI = 300
 DTF_MIN_ACCEPTABLE_DPI = 150
 DTF_MIN_DIMENSION_PX = 100
 
+# Real-world stroke/detail width below which DTF printing risks dropout or
+# blur — used by the fine-lines / small-details checks below.
+DTF_MIN_LINE_WIDTH_MM = 1.0
+DTF_MIN_DETAIL_WIDTH_MM = 0.6
+_MM_PER_INCH = 25.4
+
 
 def _clamp(value: float, low: float, high: float) -> float:
     return max(low, min(high, value))
+
+
+def _alpha_mask(img: Image.Image) -> Image.Image:
+    """Return an "L" mask of non-transparent pixels (255 opaque, 0 transparent).
+
+    Images with no real alpha channel are treated as fully opaque.
+    """
+    has_alpha = img.mode in ("RGBA", "LA", "PA") or "transparency" in img.info
+    if not has_alpha:
+        return Image.new("L", img.size, 255)
+    alpha = img.convert("RGBA").getchannel("A")
+    return alpha.point(lambda a: 255 if a > 16 else 0)
+
+
+def _opaque_pixel_count(mask: Image.Image) -> float:
+    # Stat.sum on an "L" mask of only {0, 255} values is a fast (C-side) way
+    # to count opaque pixels without a Python-level loop over every pixel.
+    return ImageStat.Stat(mask).sum[0] / 255.0
+
+
+def _touching_edges(mask: Image.Image) -> set[str]:
+    """Which canvas edges the opaque content's bounding box reaches."""
+    bbox = mask.getbbox()
+    if bbox is None:
+        return set()
+    left, top, right, bottom = bbox
+    width, height = mask.size
+    edges = set()
+    if left <= 0:
+        edges.add("left")
+    if top <= 0:
+        edges.add("top")
+    if right >= width:
+        edges.add("right")
+    if bottom >= height:
+        edges.add("bottom")
+    return edges
+
+
+def _detail_loss_ratio(mask: Image.Image, kernel_px: int) -> float:
+    """Fraction of opaque pixels lost to a morphological *opening* (erode then
+    dilate) at `kernel_px` — the standard technique for finding features
+    narrower than a given width without also flagging bulky shapes.
+
+    Erosion alone shrinks every shape's boundary regardless of its size, which
+    would flag any modestly-sized solid shape as "thin". Opening's dilation
+    pass grows a shape back out afterward, so a bulky shape (wider than the
+    kernel) is restored to ~its original size while a thin one (narrower than
+    the kernel), having been eroded away to nothing, stays gone. PIL's rank
+    filters extend the canvas edge by replication, so this measures loss
+    against the artwork's *internal* transparent boundaries only, not the
+    canvas edge (that's `_touching_edges`'s job instead).
+    """
+    if kernel_px < 3:
+        return 0.0
+    if kernel_px % 2 == 0:
+        kernel_px += 1
+    before = _opaque_pixel_count(mask)
+    if before == 0:
+        return 0.0
+    opened = mask.filter(ImageFilter.MinFilter(kernel_px)).filter(
+        ImageFilter.MaxFilter(kernel_px)
+    )
+    after = _opaque_pixel_count(opened)
+    return max(0.0, (before - after) / before)
+
+
+def _mm_to_px(mm: float, dpi: int) -> int:
+    return max(1, round(mm / _MM_PER_INCH * dpi))
 
 
 def extract_metadata(data: bytes) -> dict[str, Any]:
@@ -58,7 +133,12 @@ def dtf_check(data: bytes, parameters: dict[str, Any] | None = None) -> dict[str
 
     Returns the base metadata plus `effective_dpi`, a `checks` list of
     `{code, severity, message}` (severity "warning" or "error"), and an overall
-    `ready` flag (false if any check is an "error").
+    `ready` flag (false if any check is an "error"). Also runs print-specific
+    checks — `potential_clipping` (content reaching the canvas edge),
+    `fine_lines` and `small_details` (content thinner than DTF can reliably
+    reproduce, estimated at the effective DPI). The line/detail checks are a
+    heuristic (erosion-based detail-loss proxy), not real OCR or vector
+    analysis — advisory, like every other check here.
     """
     parameters = parameters or {}
     meta = extract_metadata(data)
@@ -121,6 +201,53 @@ def dtf_check(data: bytes, parameters: dict[str, Any] | None = None) -> dict[str
             }
         )
 
+    with Image.open(BytesIO(data)) as img:
+        img.load()
+        mask = _alpha_mask(img)
+
+    touching = _touching_edges(mask)
+    if touching and len(touching) < 4:
+        checks.append(
+            {
+                "code": "potential_clipping",
+                "severity": "warning",
+                "message": f"Artwork content reaches the {', '.join(sorted(touching))} "
+                "edge of the canvas and may be clipped when printed — add a small "
+                "transparent margin around the design.",
+            }
+        )
+
+    # Only meaningful when the canvas has a genuine mix of opaque/transparent
+    # pixels — a fully solid or fully empty canvas has no internal detail for
+    # erosion to measure, and would otherwise report a spurious 0% loss.
+    opaque_count = _opaque_pixel_count(mask)
+    if 0 < opaque_count < mask.width * mask.height:
+        dpi_for_detail = effective_dpi or DTF_RECOMMENDED_DPI
+
+        fine_line_kernel = _mm_to_px(DTF_MIN_LINE_WIDTH_MM, dpi_for_detail)
+        if _detail_loss_ratio(mask, fine_line_kernel) > 0.10:
+            checks.append(
+                {
+                    "code": "fine_lines",
+                    "severity": "warning",
+                    "message": f"Some strokes appear thinner than the "
+                    f"~{DTF_MIN_LINE_WIDTH_MM:.1f}mm DTF can reliably print at "
+                    f"{dpi_for_detail} DPI; thin lines may drop out or blur.",
+                }
+            )
+
+        detail_kernel = _mm_to_px(DTF_MIN_DETAIL_WIDTH_MM, dpi_for_detail)
+        if _detail_loss_ratio(mask, detail_kernel) > 0.03:
+            checks.append(
+                {
+                    "code": "small_details",
+                    "severity": "warning",
+                    "message": "Small text or fine details thinner than "
+                    f"~{DTF_MIN_DETAIL_WIDTH_MM:.1f}mm were detected; they may not "
+                    "print cleanly. Consider enlarging small text before printing.",
+                }
+            )
+
     ready = not any(c["severity"] == "error" for c in checks)
     return {**meta, "effective_dpi": effective_dpi, "checks": checks, "ready": ready}
 
@@ -177,6 +304,104 @@ def upscale(data: bytes, parameters: dict[str, Any] | None = None) -> bytes:
 
         out = BytesIO()
         resized.save(out, format="PNG")
+        return out.getvalue()
+
+
+def crop(data: bytes, parameters: dict[str, Any] | None = None) -> bytes:
+    """Crop to a pixel rectangle.
+
+    Optional `parameters`: `left`, `top`, `right`, `bottom` (px; default to
+    the image's own edges). Values are clamped to the image bounds and
+    normalized so the rectangle is never inverted or empty.
+    """
+    parameters = parameters or {}
+    with Image.open(BytesIO(data)) as img:
+        img.load()
+        width, height = img.size
+        left = int(_clamp(float(parameters.get("left", 0)), 0, width))
+        top = int(_clamp(float(parameters.get("top", 0)), 0, height))
+        right = int(_clamp(float(parameters.get("right", width)), 0, width))
+        bottom = int(_clamp(float(parameters.get("bottom", height)), 0, height))
+        left, right = sorted((left, right))
+        top, bottom = sorted((top, bottom))
+        if right - left < 1:
+            right = left + 1
+        if bottom - top < 1:
+            bottom = top + 1
+        cropped = img.crop((left, top, right, bottom))
+
+        out = BytesIO()
+        cropped.save(out, format="PNG")
+        return out.getvalue()
+
+
+def rotate(data: bytes, parameters: dict[str, Any] | None = None) -> bytes:
+    """Rotate clockwise by a multiple of 90 degrees (default 90).
+
+    Optional `parameters.degrees` is rounded to the nearest multiple of 90.
+    The canvas expands to fit the rotated image, so nothing is cropped off.
+    """
+    parameters = parameters or {}
+    degrees = round(float(parameters.get("degrees", 90)) / 90.0) * 90 % 360
+
+    with Image.open(BytesIO(data)) as img:
+        img.load()
+        # PIL's Image.rotate() turns counter-clockwise for a positive angle;
+        # the editor's "rotate" convention is clockwise, hence the negation.
+        rotated = img.rotate(-degrees, expand=True) if degrees else img.copy()
+
+        out = BytesIO()
+        rotated.save(out, format="PNG")
+        return out.getvalue()
+
+
+def flip(data: bytes, parameters: dict[str, Any] | None = None) -> bytes:
+    """Mirror the image.
+
+    Optional `parameters.direction`: "horizontal" (default, left-right
+    mirror) or "vertical" (top-bottom mirror).
+    """
+    parameters = parameters or {}
+    direction = parameters.get("direction", "horizontal")
+
+    with Image.open(BytesIO(data)) as img:
+        img.load()
+        flipped = (
+            img.transpose(Image.FLIP_TOP_BOTTOM)
+            if direction == "vertical"
+            else img.transpose(Image.FLIP_LEFT_RIGHT)
+        )
+
+        out = BytesIO()
+        flipped.save(out, format="PNG")
+        return out.getvalue()
+
+
+def resize(data: bytes, parameters: dict[str, Any] | None = None) -> bytes:
+    """Resize to explicit pixel dimensions.
+
+    Unlike `upscale`, this isn't scale-based or capped to
+    `MAX_UPSCALE_FACTOR` — it's a direct editor resize (up or down). Optional
+    `parameters`: `width`/`height` (px; if only one is given, the other is
+    scaled to preserve aspect ratio). With neither given, the image is
+    returned unchanged.
+    """
+    parameters = parameters or {}
+    target_w = parameters.get("width")
+    target_h = parameters.get("height")
+
+    with Image.open(BytesIO(data)) as img:
+        img.load()
+        if target_w or target_h:
+            orig_w, orig_h = img.width, img.height
+            if target_w and not target_h:
+                target_h = round(orig_h * (float(target_w) / orig_w))
+            elif target_h and not target_w:
+                target_w = round(orig_w * (float(target_h) / orig_h))
+            img = img.resize((max(int(target_w), 1), max(int(target_h), 1)), Image.LANCZOS)
+
+        out = BytesIO()
+        img.save(out, format="PNG")
         return out.getvalue()
 
 

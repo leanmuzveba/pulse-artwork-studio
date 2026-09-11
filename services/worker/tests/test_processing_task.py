@@ -153,6 +153,73 @@ def test_vectorize_op_uploads_svg_with_no_pixel_dimensions(monkeypatch):
     assert result["mime_type"] == "image/svg+xml"
 
 
+def test_crop_op_uploads_result_and_returns_location(monkeypatch):
+    monkeypatch.setattr(processing.run, "update_state", lambda *a, **k: None)
+    monkeypatch.setattr(storage, "download_bytes", lambda bucket, key: _png(10, 10))
+    uploaded = {}
+
+    def fake_upload(bucket, key, data, content_type):
+        uploaded.update(bucket=bucket, key=key, data=data, content_type=content_type)
+
+    monkeypatch.setattr(storage, "upload_bytes", fake_upload)
+
+    result = processing.run.run(
+        "job-9", "crop", "pulse-originals", "src.png", {"right": 5, "bottom": 5}, "proj-4"
+    )
+
+    assert uploaded["bucket"] == "pulse-derived"
+    assert uploaded["key"] == "projects/proj-4/derived/job-9/crop.png"
+    assert result["width"] == 5 and result["height"] == 5
+
+
+def test_rotate_op_uploads_result_and_returns_location(monkeypatch):
+    monkeypatch.setattr(processing.run, "update_state", lambda *a, **k: None)
+    monkeypatch.setattr(storage, "download_bytes", lambda bucket, key: _png(10, 20))
+    uploaded = {}
+    monkeypatch.setattr(
+        storage, "upload_bytes", lambda b, k, d, c: uploaded.update(bucket=b, key=k)
+    )
+
+    result = processing.run.run(
+        "job-10", "rotate", "pulse-originals", "src.png", {}, "proj-4"
+    )
+
+    assert uploaded["key"] == "projects/proj-4/derived/job-10/rotate.png"
+    assert result["width"] == 20 and result["height"] == 10  # 90-degree default
+
+
+def test_flip_op_uploads_result_and_returns_location(monkeypatch):
+    monkeypatch.setattr(processing.run, "update_state", lambda *a, **k: None)
+    monkeypatch.setattr(storage, "download_bytes", lambda bucket, key: _png(10, 20))
+    uploaded = {}
+    monkeypatch.setattr(
+        storage, "upload_bytes", lambda b, k, d, c: uploaded.update(bucket=b, key=k)
+    )
+
+    result = processing.run.run(
+        "job-11", "flip", "pulse-originals", "src.png", {"direction": "vertical"}, "proj-4"
+    )
+
+    assert uploaded["key"] == "projects/proj-4/derived/job-11/flip.png"
+    assert result["width"] == 10 and result["height"] == 20
+
+
+def test_resize_op_uploads_result_and_returns_location(monkeypatch):
+    monkeypatch.setattr(processing.run, "update_state", lambda *a, **k: None)
+    monkeypatch.setattr(storage, "download_bytes", lambda bucket, key: _png(10, 20))
+    uploaded = {}
+    monkeypatch.setattr(
+        storage, "upload_bytes", lambda b, k, d, c: uploaded.update(bucket=b, key=k)
+    )
+
+    result = processing.run.run(
+        "job-12", "resize", "pulse-originals", "src.png", {"width": 40, "height": 40}, "proj-4"
+    )
+
+    assert uploaded["key"] == "projects/proj-4/derived/job-12/resize.png"
+    assert result["width"] == 40 and result["height"] == 40
+
+
 def test_unsupported_operation_raises():
     with pytest.raises(ValueError):
         processing.run.run("job-3", "not-a-real-op", "b", "k")

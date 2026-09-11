@@ -6,7 +6,11 @@ enum JobOperation {
   vectorize,
   halftone,
   embroidery,
-  dtfCheck("dtf_check");
+  dtfCheck("dtf_check"),
+  crop,
+  rotate,
+  flip,
+  resize;
 
   const JobOperation([String? wireValue]) : _wireValue = wireValue;
 

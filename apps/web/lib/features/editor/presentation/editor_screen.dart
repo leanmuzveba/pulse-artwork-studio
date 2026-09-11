@@ -37,7 +37,8 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
     });
   }
 
-  Future<void> _runTool(JobOperation operation) async {
+  Future<void> _runTool(JobOperation operation,
+      {Map<String, dynamic> parameters = const {}}) async {
     setState(() => _running = operation);
     try {
       final job = await ref
@@ -45,7 +46,8 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
           .run(
               projectId: widget.projectId,
               artworkId: widget.artworkId,
-              operation: operation);
+              operation: operation,
+              parameters: parameters);
       if (!mounted) return;
       if (job.status == JobStatus.completed) {
         ref.invalidate(artworkDetailProvider(
@@ -93,6 +95,58 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
     }
   }
 
+  Future<void> _promptResize() async {
+    final artwork = ref
+        .read(artworkDetailProvider(
+            (projectId: widget.projectId, artworkId: widget.artworkId)))
+        .valueOrNull;
+    final widthCtrl =
+        TextEditingController(text: artwork?.width?.toString() ?? "");
+    final heightCtrl =
+        TextEditingController(text: artwork?.height?.toString() ?? "");
+    final params = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => _DimensionDialog(
+        title: "Resize",
+        fields: [
+          ("width", "Width (px)", widthCtrl),
+          ("height", "Height (px)", heightCtrl),
+        ],
+      ),
+    );
+    if (params != null && params.isNotEmpty) {
+      await _runTool(JobOperation.resize, parameters: params);
+    }
+  }
+
+  Future<void> _promptCrop() async {
+    final artwork = ref
+        .read(artworkDetailProvider(
+            (projectId: widget.projectId, artworkId: widget.artworkId)))
+        .valueOrNull;
+    final leftCtrl = TextEditingController(text: "0");
+    final topCtrl = TextEditingController(text: "0");
+    final rightCtrl =
+        TextEditingController(text: artwork?.width?.toString() ?? "");
+    final bottomCtrl =
+        TextEditingController(text: artwork?.height?.toString() ?? "");
+    final params = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => _DimensionDialog(
+        title: "Crop",
+        fields: [
+          ("left", "Left (px)", leftCtrl),
+          ("top", "Top (px)", topCtrl),
+          ("right", "Right (px)", rightCtrl),
+          ("bottom", "Bottom (px)", bottomCtrl),
+        ],
+      ),
+    );
+    if (params != null && params.isNotEmpty) {
+      await _runTool(JobOperation.crop, parameters: params);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final artworkAsync = ref.watch(
@@ -114,7 +168,12 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
         Expanded(
           child: Row(
             children: [
-              _ToolRail(running: _running, onSelect: _runTool),
+              _ToolRail(
+                running: _running,
+                onSelect: _runTool,
+                onResize: _promptResize,
+                onCrop: _promptCrop,
+              ),
               Expanded(
                 child: Container(
                   color: AppColors.canvasDark,
@@ -185,23 +244,55 @@ class _TopBar extends StatelessWidget {
 }
 
 class _ToolRail extends StatelessWidget {
-  const _ToolRail({required this.running, required this.onSelect});
+  const _ToolRail({
+    required this.running,
+    required this.onSelect,
+    required this.onResize,
+    required this.onCrop,
+  });
   final JobOperation? running;
-  final void Function(JobOperation) onSelect;
+  final void Function(JobOperation, {Map<String, dynamic> parameters})
+      onSelect;
+  final VoidCallback onResize;
+  final VoidCallback onCrop;
 
   @override
   Widget build(BuildContext context) {
-    final tools = <(JobOperation, IconData, String)>[
-      (JobOperation.enhance, Icons.auto_fix_high_rounded, "AI Enhance"),
-      (JobOperation.upscale, Icons.open_in_full_rounded, "Upscale 2x"),
+    final tools = <(JobOperation, IconData, String, Map<String, dynamic>)>[
+      (JobOperation.enhance, Icons.auto_fix_high_rounded, "AI Enhance", const {}),
+      (JobOperation.upscale, Icons.open_in_full_rounded, "Upscale 2x", const {}),
       (
         JobOperation.backgroundRemoval,
         Icons.layers_clear_rounded,
         "Remove Background",
+        const {},
       ),
-      (JobOperation.vectorize, Icons.gesture_rounded, "Vectorize"),
-      (JobOperation.halftone, Icons.grain_rounded, "Halftone"),
-      (JobOperation.embroidery, Icons.texture_rounded, "Embroidery Preview"),
+      (JobOperation.vectorize, Icons.gesture_rounded, "Vectorize", const {}),
+      (JobOperation.halftone, Icons.grain_rounded, "Halftone", const {}),
+      (
+        JobOperation.embroidery,
+        Icons.texture_rounded,
+        "Embroidery Preview",
+        const {},
+      ),
+      (
+        JobOperation.rotate,
+        Icons.rotate_90_degrees_cw_rounded,
+        "Rotate 90°",
+        const {"degrees": 90},
+      ),
+      (
+        JobOperation.flip,
+        Icons.flip_rounded,
+        "Flip Horizontal",
+        const {"direction": "horizontal"},
+      ),
+      (
+        JobOperation.flip,
+        Icons.flip_camera_android_outlined,
+        "Flip Vertical",
+        const {"direction": "vertical"},
+      ),
     ];
     return Container(
       width: 64,
@@ -209,44 +300,125 @@ class _ToolRail extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 16),
       child: Column(
         children: [
-          for (final (operation, icon, tooltip) in tools)
+          for (final (operation, icon, tooltip, parameters) in tools)
+            _RailButton(
+              icon: icon,
+              tooltip: tooltip,
+              active: running == operation,
+              enabled: running == null,
+              onTap: () => onSelect(operation, parameters: parameters),
+            ),
+          const Divider(height: 12, indent: 12, endIndent: 12),
+          _RailButton(
+            icon: Icons.crop_rounded,
+            tooltip: "Crop",
+            active: false,
+            enabled: running == null,
+            onTap: onCrop,
+          ),
+          _RailButton(
+            icon: Icons.aspect_ratio_rounded,
+            tooltip: "Resize",
+            active: false,
+            enabled: running == null,
+            onTap: onResize,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RailButton extends StatelessWidget {
+  const _RailButton({
+    required this.icon,
+    required this.tooltip,
+    required this.active,
+    required this.enabled,
+    required this.onTap,
+  });
+  final IconData icon;
+  final String tooltip;
+  final bool active;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Tooltip(
+        message: tooltip,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: enabled ? onTap : null,
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: active ? AppColors.pulseYellow : Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: active
+                ? const Padding(
+                    padding: EdgeInsets.all(10),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.onAccent,
+                    ),
+                  )
+                : Icon(
+                    icon,
+                    color: enabled ? AppColors.textMuted : Colors.white24,
+                    size: 20,
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DimensionDialog extends StatelessWidget {
+  const _DimensionDialog({required this.title, required this.fields});
+  final String title;
+  final List<(String, String, TextEditingController)> fields;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(title),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final (_, label, controller) in fields)
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
-              child: Tooltip(
-                message: tooltip,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(10),
-                  onTap: running == null ? () => onSelect(operation) : null,
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: running == operation
-                          ? AppColors.pulseYellow
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: running == operation
-                        ? const Padding(
-                            padding: EdgeInsets.all(10),
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: AppColors.onAccent,
-                            ),
-                          )
-                        : Icon(
-                            icon,
-                            color: running == null
-                                ? AppColors.textMuted
-                                : Colors.white24,
-                            size: 20,
-                          ),
-                  ),
-                ),
+              child: TextField(
+                controller: controller,
+                keyboardType: const TextInputType.numberWithOptions(),
+                decoration: InputDecoration(labelText: label),
               ),
             ),
         ],
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text("Cancel"),
+        ),
+        FilledButton(
+          onPressed: () {
+            final params = <String, dynamic>{};
+            for (final (key, _, controller) in fields) {
+              final value = int.tryParse(controller.text.trim());
+              if (value != null) params[key] = value;
+            }
+            Navigator.of(context).pop(params);
+          },
+          child: const Text("Apply"),
+        ),
+      ],
     );
   }
 }

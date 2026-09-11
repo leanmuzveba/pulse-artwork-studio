@@ -27,7 +27,8 @@ from app.services import queue
 
 router = APIRouter()
 
-# All processing operations are now implemented (Phase 3 complete).
+# All processing operations are now implemented (Phase 3 complete; crop/
+# rotate/flip/resize — the Phase 3 "editor canvas tools" — added after).
 SUPPORTED_OPERATIONS = {
     JobOperation.METADATA,
     JobOperation.ENHANCE,
@@ -37,6 +38,10 @@ SUPPORTED_OPERATIONS = {
     JobOperation.EMBROIDERY,
     JobOperation.VECTORIZE,
     JobOperation.DTF_CHECK,
+    JobOperation.CROP,
+    JobOperation.ROTATE,
+    JobOperation.FLIP,
+    JobOperation.RESIZE,
 }
 
 # Operations that produce a new derived Artwork rather than annotating the original.
@@ -47,6 +52,10 @@ _DERIVING_OPERATIONS = {
     JobOperation.HALFTONE,
     JobOperation.EMBROIDERY,
     JobOperation.VECTORIZE,
+    JobOperation.CROP,
+    JobOperation.ROTATE,
+    JobOperation.FLIP,
+    JobOperation.RESIZE,
 }
 _TERMINAL = {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}
 

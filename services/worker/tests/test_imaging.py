@@ -4,18 +4,22 @@ from __future__ import annotations
 
 import io
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from worker.services import imaging
 from worker.services.imaging import (
+    crop,
     dtf_check,
     embroidery,
     enhance,
     export_pdf,
     export_png,
     extract_metadata,
+    flip,
     halftone,
     remove_background,
+    resize,
+    rotate,
     upscale,
     vectorize,
 )
@@ -104,6 +108,66 @@ def test_dtf_check_flags_unsupported_color_mode():
     report = dtf_check(buf.getvalue())
     codes = {c["code"] for c in report["checks"]}
     assert "unsupported_color_mode" in codes
+
+
+def _rgba_with_shape(width: int, height: int, draw_fn) -> bytes:
+    img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw_fn(ImageDraw.Draw(img))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def test_dtf_check_flags_content_touching_one_edge_only():
+    # A block touching only the left edge, with margin on every other side.
+    data = _rgba_with_shape(
+        100, 100, lambda d: d.rectangle([0, 20, 40, 80], fill=(0, 0, 0, 255))
+    )
+    report = dtf_check(data)
+    codes = {c["code"]: c for c in report["checks"]}
+    assert "potential_clipping" in codes
+    assert "left" in codes["potential_clipping"]["message"]
+
+
+def test_dtf_check_does_not_flag_clipping_for_full_bleed_art():
+    # Opaque on all four edges — treated as deliberate full-bleed, not a crop.
+    report = dtf_check(_png(100, 100, "RGBA"))
+    codes = {c["code"] for c in report["checks"]}
+    assert "potential_clipping" not in codes
+
+
+def test_dtf_check_does_not_flag_clipping_with_margin_on_every_side():
+    data = _rgba_with_shape(
+        100, 100, lambda d: d.rectangle([20, 20, 80, 80], fill=(0, 0, 0, 255))
+    )
+    report = dtf_check(data)
+    codes = {c["code"] for c in report["checks"]}
+    assert "potential_clipping" not in codes
+
+
+def test_dtf_check_flags_a_thin_line_as_fine_lines_and_small_details():
+    # A 2px-wide line at the default 300 DPI fallback is ~0.17mm — well under
+    # both the 1mm/0.6mm thresholds — with margin on every side.
+    data = _rgba_with_shape(
+        120, 120, lambda d: d.line([(20, 60), (100, 60)], fill=(0, 0, 0, 255), width=2)
+    )
+    report = dtf_check(data)
+    codes = {c["code"] for c in report["checks"]}
+    assert "fine_lines" in codes
+    assert "small_details" in codes
+    assert "potential_clipping" not in codes
+
+
+def test_dtf_check_does_not_flag_a_bold_shape_as_fine_lines():
+    # A large, solid block: erosion shrinks its boundary, but opening (the
+    # dilation pass) restores it — it isn't actually thin anywhere.
+    data = _rgba_with_shape(
+        200, 200, lambda d: d.rectangle([40, 40, 160, 160], fill=(0, 0, 0, 255))
+    )
+    report = dtf_check(data)
+    codes = {c["code"] for c in report["checks"]}
+    assert "fine_lines" not in codes
+    assert "small_details" not in codes
 
 
 # remove_background delegates to the configured AI provider (see
@@ -233,3 +297,71 @@ def test_embroidery_preserves_opaque_mode():
     out = embroidery(_png(30, 30, "RGB"))
     meta = extract_metadata(out)
     assert meta["has_alpha"] is False
+
+
+def test_crop_to_explicit_rectangle():
+    out = crop(_png(100, 100, "RGBA"), {"left": 10, "top": 20, "right": 60, "bottom": 50})
+    meta = extract_metadata(out)
+    assert (meta["width"], meta["height"]) == (50, 30)
+
+
+def test_crop_clamps_out_of_bounds_rectangle():
+    out = crop(_png(50, 50, "RGBA"), {"left": -10, "top": -10, "right": 999, "bottom": 999})
+    meta = extract_metadata(out)
+    assert (meta["width"], meta["height"]) == (50, 50)
+
+
+def test_crop_normalizes_an_inverted_rectangle():
+    # right < left, bottom < top — should still produce a valid, non-empty crop.
+    out = crop(_png(100, 100, "RGBA"), {"left": 80, "top": 80, "right": 20, "bottom": 20})
+    meta = extract_metadata(out)
+    assert (meta["width"], meta["height"]) == (60, 60)
+
+
+def test_rotate_default_is_90_degrees_clockwise_and_swaps_dimensions():
+    out = rotate(_png(20, 10, "RGBA"))
+    meta = extract_metadata(out)
+    assert (meta["width"], meta["height"]) == (10, 20)
+
+
+def test_rotate_180_preserves_dimensions():
+    out = rotate(_png(20, 10, "RGBA"), {"degrees": 180})
+    meta = extract_metadata(out)
+    assert (meta["width"], meta["height"]) == (20, 10)
+
+
+def test_rotate_snaps_to_nearest_90_degree_multiple():
+    out = rotate(_png(20, 10, "RGBA"), {"degrees": 100})
+    meta = extract_metadata(out)
+    assert (meta["width"], meta["height"]) == (10, 20)  # 100 -> nearest is 90
+
+
+def test_flip_horizontal_preserves_dimensions():
+    out = flip(_png(20, 10, "RGBA"))
+    meta = extract_metadata(out)
+    assert (meta["width"], meta["height"]) == (20, 10)
+
+
+def test_flip_vertical_mirrors_top_to_bottom():
+    data = _rgba_with_shape(10, 10, lambda d: d.point([(0, 0)], fill=(0, 0, 0, 255)))
+    out = flip(data, {"direction": "vertical"})
+    pixel = Image.open(io.BytesIO(out)).convert("RGBA").getpixel((0, 9))
+    assert pixel == (0, 0, 0, 255)
+
+
+def test_resize_to_explicit_dimensions():
+    out = resize(_png(10, 20, "RGBA"), {"width": 40, "height": 60})
+    meta = extract_metadata(out)
+    assert (meta["width"], meta["height"]) == (40, 60)
+
+
+def test_resize_by_width_preserves_aspect_ratio():
+    out = resize(_png(10, 20, "RGBA"), {"width": 5})
+    meta = extract_metadata(out)
+    assert (meta["width"], meta["height"]) == (5, 10)
+
+
+def test_resize_without_dimensions_is_a_no_op():
+    out = resize(_png(10, 20, "RGBA"))
+    meta = extract_metadata(out)
+    assert (meta["width"], meta["height"]) == (10, 20)

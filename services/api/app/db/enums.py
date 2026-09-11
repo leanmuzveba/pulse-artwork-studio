@@ -50,6 +50,10 @@ class JobOperation(str, Enum):
     HALFTONE = "halftone"
     EMBROIDERY = "embroidery"
     DTF_CHECK = "dtf_check"
+    CROP = "crop"
+    ROTATE = "rotate"
+    FLIP = "flip"
+    RESIZE = "resize"
 
 
 class ExportFormat(str, Enum):

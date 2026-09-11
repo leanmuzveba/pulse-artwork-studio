@@ -293,6 +293,10 @@ def test_vectorize_job_success_creates_svg_derived_artwork(monkeypatch):
         "embroidery",
         "vectorize",
         "dtf_check",
+        "crop",
+        "rotate",
+        "flip",
+        "resize",
     ],
 )
 def test_supported_operations_are_accepted(monkeypatch, operation):
