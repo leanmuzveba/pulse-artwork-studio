@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     s3_bucket_derived: str = "pulse-derived"
     s3_bucket_exports: str = "pulse-exports"
 
+    # AI provider selection (worker/services/ai_providers.py). Any future
+    # remote provider's API key belongs here too — server-side only, never
+    # shipped to the Flutter client.
+    ai_background_removal_provider: str = "rembg_local"
+
 
 @lru_cache
 def get_settings() -> Settings:

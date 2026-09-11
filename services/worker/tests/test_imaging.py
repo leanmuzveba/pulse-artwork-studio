@@ -106,42 +106,30 @@ def test_dtf_check_flags_unsupported_color_mode():
     assert "unsupported_color_mode" in codes
 
 
-# remove_background wraps rembg (a real ONNX model) — the actual segmentation is
-# rembg's problem to test; these tests only verify our wiring (session reuse,
-# parameter passthrough) at that boundary, so no model download is needed here.
+# remove_background delegates to the configured AI provider (see
+# worker/services/ai_providers.py and test_ai_providers.py, which cover the
+# actual rembg wiring) — this only verifies imaging.py picks the provider up
+# and passes parameters through.
 
 
-def test_remove_background_passes_input_and_parameters_through(monkeypatch):
-    imaging._background_removal_session.cache_clear()
-    monkeypatch.setattr(imaging.rembg, "new_session", lambda name: f"session:{name}")
+def test_remove_background_delegates_to_configured_provider(monkeypatch):
     calls = []
 
-    def fake_remove(data, session=None, alpha_matting=False):
-        calls.append((data, session, alpha_matting))
-        return b"fake-output"
+    class FakeProvider:
+        name = "fake"
 
-    monkeypatch.setattr(imaging.rembg, "remove", fake_remove)
+        def remove(self, data, *, alpha_matting=False):
+            calls.append((data, alpha_matting))
+            return b"fake-output"
+
+    monkeypatch.setattr(
+        imaging.ai_providers, "get_background_removal_provider", lambda: FakeProvider()
+    )
 
     out = remove_background(b"input-bytes", {"alpha_matting": True})
 
     assert out == b"fake-output"
-    assert calls == [(b"input-bytes", "session:u2net", True)]
-
-
-def test_remove_background_reuses_cached_session(monkeypatch):
-    imaging._background_removal_session.cache_clear()
-    session_calls = []
-    monkeypatch.setattr(
-        imaging.rembg, "new_session", lambda name: session_calls.append(name) or "sess"
-    )
-    monkeypatch.setattr(
-        imaging.rembg, "remove", lambda data, session=None, alpha_matting=False: b"x"
-    )
-
-    remove_background(b"a")
-    remove_background(b"b")
-
-    assert len(session_calls) == 1
+    assert calls == [(b"input-bytes", True)]
 
 
 # vectorize wraps vtracer (a native Rust extension) — the actual tracing is

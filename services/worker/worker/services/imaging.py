@@ -3,13 +3,13 @@ easy to test in isolation."""
 
 from __future__ import annotations
 
-from functools import lru_cache
 from io import BytesIO
 from typing import Any
 
-import rembg
 import vtracer
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageOps, ImageStat
+
+from worker.services import ai_providers
 
 # Upscale is capped to avoid a single job exhausting worker memory/CPU.
 MAX_UPSCALE_FACTOR = 4.0
@@ -180,23 +180,19 @@ def upscale(data: bytes, parameters: dict[str, Any] | None = None) -> bytes:
         return out.getvalue()
 
 
-@lru_cache(maxsize=1)
-def _background_removal_session():
-    """Load the U^2-Net model once per worker process and reuse it across jobs."""
-    return rembg.new_session("u2net")
-
-
 def remove_background(data: bytes, parameters: dict[str, Any] | None = None) -> bytes:
-    """Remove the background, producing a transparent PNG (via rembg/U^2-Net).
+    """Remove the background, producing a transparent PNG.
 
-    Optional `parameters.alpha_matting` (bool, default False) trades speed for
-    softer edges on foreground objects with fine detail (hair, fur).
+    Delegates to the configured background-removal AI provider (see
+    `worker/services/ai_providers.py`) — defaults to rembg/U^2-Net, running
+    locally with no external API call. Optional `parameters.alpha_matting`
+    (bool, default False) trades speed for softer edges on foreground objects
+    with fine detail (hair, fur).
     """
     parameters = parameters or {}
     alpha_matting = bool(parameters.get("alpha_matting", False))
-    return rembg.remove(
-        data, session=_background_removal_session(), alpha_matting=alpha_matting
-    )
+    provider = ai_providers.get_background_removal_provider()
+    return provider.remove(data, alpha_matting=alpha_matting)
 
 
 def vectorize(data: bytes, parameters: dict[str, Any] | None = None) -> bytes:
